@@ -1,0 +1,156 @@
+// SalesGate — Prismaスキーマ
+// 承認ファーストAI SDRハブの中核データモデル
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// リードのステータス
+enum LeadStatus {
+  ACTIVE // 追跡中
+  RESPONDED // 返信あり
+  SLEEPING // 最大タッチ数到達（休眠）
+  SUPPRESSED // 抑制（オプトアウト）
+}
+
+// タスク種別
+enum TaskType {
+  FOLLOW_UP // フォローアップ
+  RESEARCH // リサーチ
+  REVIEW_REQUEST // 事前相談（request_review）
+  CUSTOM // カスタム
+}
+
+// タスク状態
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+// 承認アイテムの状態遷移:
+// AWAITING_APPROVAL → APPROVED（人間が承認）
+// AWAITING_APPROVAL → EDITED（人間が編集して承認）
+// AWAITING_APPROVAL → REJECTED（人間が却下）
+// APPROVED / EDITED → CLAIMED（エージェントがclaim）
+// CLAIMED → SENT / FAILED（送信結果報告）
+// AWAITING_APPROVAL → ARCHIVED（7日放置で自動アーカイブ）
+enum ApprovalStatus {
+  AWAITING_APPROVAL
+  APPROVED
+  EDITED
+  REJECTED
+  CLAIMED
+  SENT
+  FAILED
+  ARCHIVED
+}
+
+// リード（ミニCRMの中心）
+model Lead {
+  id             String     @id @default(cuid())
+  company        String
+  contactName    String?
+  email          String
+  status         LeadStatus @default(ACTIVE)
+  notes          String?
+  touchCount     Int        @default(0)
+  lastTouchAt    DateTime?
+  nextFollowUpAt DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  tasks         Task[]
+  approvalItems ApprovalItem[]
+  messageLogs   MessageLog[]
+
+  @@unique([email])
+  @@index([status])
+}
+
+// タスク（エージェントが実行する仕事。エージェントからも作成・変更可能）
+model Task {
+  id           String     @id @default(cuid())
+  type         TaskType   @default(CUSTOM)
+  title        String
+  description  String?
+  status       TaskStatus @default(PENDING)
+  humanComment String? // 人間からの返答（request_reviewへの回答など）
+  leadId       String?
+  lead         Lead?      @relation(fields: [leadId], references: [id])
+  dueAt        DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([status])
+  @@index([leadId])
+}
+
+// 承認アイテム（承認キューの本体）
+model ApprovalItem {
+  id         String         @id @default(cuid())
+  leadId     String?
+  lead       Lead?          @relation(fields: [leadId], references: [id])
+  subject    String
+  body       String
+  status     ApprovalStatus @default(AWAITING_APPROVAL)
+  // 提出したエージェント名（監査用）
+  submittedBy String?
+
+  // 根拠パネル用: なぜこのリードに送るのか（調査メモ・ソース）
+  evidence   String?
+  // リスクフラグ（JSON配列）: 例 ["抑制リスト該当", "過去に返信あり"]
+  riskFlags  String?
+
+  // 決定履歴
+  feedback   String? // 却下理由・編集メモ
+  editedBody String? // 人間が編集した本文
+  approvedAt DateTime?
+  rejectedAt DateTime?
+  archivedAt DateTime?
+
+  // claim（送信ハンドオフ）: 承認済みアイテムは1エージェントのみがclaim可能
+  claimedBy  String?
+  claimedAt  DateTime?
+  sentAt     DateTime?
+  messageId  String?
+  error      String?
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  messageLogs MessageLog[]
+
+  @@index([status])
+  @@index([leadId])
+}
+
+// 送信履歴（監査ログの一部）
+model MessageLog {
+  id             String        @id @default(cuid())
+  approvalItemId String?
+  approvalItem   ApprovalItem? @relation(fields: [approvalItemId], references: [id])
+  leadId         String?
+  lead           Lead?         @relation(fields: [leadId], references: [id])
+  subject        String
+  body           String
+  status         String // SENT / FAILED
+  messageId      String?
+  error          String?
+  sentBy         String? // 送信したエージェント名
+  sentAt         DateTime      @default(now())
+
+  @@index([leadId])
+}
+
+// アプリ設定（日次送信上限・フォローアップルールなど）
+model Setting {
+  key   String @id
+  value String
+}

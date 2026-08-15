@@ -1,0 +1,54 @@
+{
+  "name": "salesgate",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Approval-first AI SDR Hub — 何も勝手に送らない。営業はAIに、判断はあなたに。",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:seed": "node prisma/seed.ts",
+    "scheduler": "node scripts/scheduler.ts",
+    "scheduler:watch": "node scripts/scheduler.ts --watch",
+    "test": "node --test --test-isolation=none tests/*.test.ts",
+    "test:watch": "node --test --test-isolation=none --watch tests/*.test.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "better-sqlite3",
+      "esbuild",
+      "prisma"
+    ],
+    "overrides": {
+      "better-sqlite3": "13.0.3"
+    }
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@prisma/adapter-better-sqlite3": "6.19.3",
+    "@prisma/client": "^6.19.3",
+    "better-sqlite3": "13.0.3",
+    "next": "^16.3.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "prisma": "^6.19.3",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.3"
+  }
+}

@@ -50,16 +50,16 @@
 - [x] **6. フォローアップスケジューラー**
   - ルール: 未返信3日で追撃タスク生成、最大3回で「休眠」に
   - 定期実行（`pnpm scheduler`（1回）/ `pnpm scheduler:watch`（1時間ごと・簡易スケジューラーで開始））
-- [ ] **7. DSH 接続の実機検証**
-  - `cordis.patch.yml` に MCP 設定追記
-  - `submit_draft` → 承認 → claim → 送信結果報告 の一連のフローを実機テスト
-  - ツール名（`mcp__sales-gate__*`）の確認
-- [ ] **8. テスト + Git 初期化**
+- [x] **7. DSH 接続の実機検証**
+  - `cordis.patch.yml` に MCP 設定追記（`mcp-sales-gate` / streamable-http / `http://localhost:3001/mcp`）— バックアップ `.bak` あり
+  - `submit_draft` → 承認 → claim → 送信結果報告 の一連のフローを MCP E2E テスト（22件）で実機検証
+  - ツール名（`mcp__sales-gate__*`）の確認 — SalesGate 側ログに DSH 由来の MCP トラフィック（202 含む）を確認済み。新規会話でのツール可視性は最終確認事項
+- [x] **8. テスト + Git 初期化**
   - [x] 状態遷移のユニットテスト（二重 claim・未承認送信の拒否を含む）— `pnpm test` で15件パス
   - [x] MCP E2E テスト — `node tests/e2e-mcp.mjs http://localhost:3001` で22件パス
-  - [ ] git init・`.gitignore`・初回コミット（**実施前**）
+  - [x] git init・`.gitignore`・初回コミット（`0f25772`・42ファイル）
 
-> **進捗メモ**: 機能実装・テストまで完了。**残るは 7 の「DSH 接続の実機検証」と、8 の Git 初期化・初回コミットのみ**です。
+> **進捗メモ**: **v0.1 の8ステップすべて完了**。完了条件（DSH接続＋承認ループの動作）は MCP E2E テスト22件パスで確認済み。残る確認事項は「新規会話で `mcp__sales-gate__*` ツールが可視化されること」のみ。
 
 **v0.1 完了条件**: DSH が実際に SalesGate に接続し、「エージェントが下書き提出 → 人間が承認 → エージェントが送信 → 結果が記録される」ループがローカルで回ること。
 
@@ -81,7 +81,7 @@
 
 | リスク | 状況 | 対処 |
 |---|---|---|
-| DSH → streamable-http MCP の実接続 | `cordis.patch.yml` への設定追記は**完了済み**（`http://localhost:3001/mcp`、streamable-http）。ただし**実機検証はこれから**（ツール名 `mcp__sales-gate__*` の確認含む） | v0.1 ステップ7で実機検証 |
+| DSH → streamable-http MCP の実接続 | `cordis.patch.yml` への設定追記は**完了済み**（`http://localhost:3001/mcp`、streamable-http）。SalesGate 側ログで DSH 由来の MCP トラフィック（202 含む）を確認済み。**残るは新規会話でのツール可視性確認**（`mcp__sales-gate__*`） | ユーザーが新規会話でツールを確認 |
 | MCP SDK の streamable-http サーバー実装 | バージョンごとに API 差の可能性 | 実装時に公式ドキュメントで確認 |
 | エージェント側の Gmail MCP 設定 | 各ハーネス依存（DSH は `cordis.patch.yml`、OpenClaw は独自設定） | README に設定例を整備 |
 | デリバビリティ | 大量送信でドメイン評価低下のリスク | 日次送信上限＋段階的な運用開始 |

@@ -88,5 +88,8 @@ export const TASK_TYPE_LABEL: Record<string, string> = {
   FOLLOW_UP: "フォローアップ",
   RESEARCH: "リサーチ",
   REVIEW_REQUEST: "事前相談",
+  MEETING_PREP: "商談準備",
+  QUOTE: "見積",
+  CONTRACT: "契約",
   CUSTOM: "カスタム",
 };

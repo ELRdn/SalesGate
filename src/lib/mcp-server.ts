@@ -5,6 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { prisma } from "./prisma";
 import { assertTransition, type ApprovalStatus } from "./approval-machine";
+import { sendSlackNotification } from "./notify";
 
 /** ツール結果ヘルパー（JSONテキストを返す） */
 function textResult(obj: unknown) {
@@ -63,6 +64,11 @@ export function createSalesServer(): McpServer {
           status: "AWAITING_APPROVAL",
         },
       });
+      // 承認待ちの発生を通知（Webhook未設定なら何もしない・失敗しても無視）
+      void sendSlackNotification(
+        "🟡 新しい承認待ちが来ました",
+        `**${subject}**\n提出者: ${agentName ?? "不明"}\nリード: ${leadId ? "紐付けあり" : "未紐付け"}\n→ http://localhost:3001/approvals で確認`,
+      );
       return textResult({
         ok: true,
         id: item.id,

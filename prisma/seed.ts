@@ -13,6 +13,8 @@ const defaults: Record<string, string> = {
   max_touches: "3",
   // 承認されず放置された下書きをアーカイブする日数
   archive_after_days: "7",
+  // Slack Webhook URL（空なら通知無効）
+  slack_webhook_url: "",
 };
 
 async function main() {

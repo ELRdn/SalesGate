@@ -18,6 +18,24 @@ async function handleMcpRequest(request: Request): Promise<Response> {
   const sessionId = request.headers.get("mcp-session-id") ?? crypto.randomUUID();
   let transport = transports.get(sessionId);
 
+  // 接続元クライアントの識別ログ（initializeのclientInfoを記録）
+  try {
+    const cloned = request.clone();
+    const bodyText = await cloned.text();
+    const parsed = JSON.parse(bodyText) as {
+      method?: string;
+      params?: { clientInfo?: { name?: string; version?: string } };
+    };
+    if (parsed.method) {
+      const info = parsed.params?.clientInfo;
+      console.log(
+        `[mcp] ${parsed.method}${info ? ` <- ${info.name} ${info.version ?? ""}` : ""} (session=${sessionId.slice(0, 8)})`,
+      );
+    }
+  } catch {
+    // ボディがJSONでない場合は無視
+  }
+
   if (!transport) {
     // McpServer は1つのトランスポートにしか接続できないため、
     // セッションごとに新しいサーバーインスタンスを生成する

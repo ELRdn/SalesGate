@@ -4,6 +4,21 @@ import { useState, useTransition } from "react";
 import { createTask } from "@/lib/actions";
 import { TASK_TYPE_LABEL } from "./status-badge";
 
+// タスク種別ごとの説明テンプレート（種別選択時に自動入力）
+const TEMPLATES: Record<string, string> = {
+  FOLLOW_UP:
+    "前回送信から未返信です。追撃メールの下書きを作成し submit_draft で承認キューに提出してください。",
+  RESEARCH: "企業情報・担当者の関心事・競合状況を調査し、結果を報告してください。",
+  REVIEW_REQUEST: "送信前に人間の意見を確認したい内容を記載してください。",
+  MEETING_PREP:
+    "商談前の準備: 企業情報・担当者の関心事・競合状況を調査し、アジェンダと提案資料の下書きを作成してください。",
+  QUOTE:
+    "見積ドラフトを作成し、submit_draft で承認キューに提出してください。金額・条件・有効期限を含めてください。",
+  CONTRACT:
+    "契約書ドラフトを作成し、submit_draft で承認キューに提出してください。期間・金額・条件を含めてください。",
+  CUSTOM: "",
+};
+
 export function TaskForm({ leads }: { leads: { id: string; company: string }[] }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +61,17 @@ export function TaskForm({ leads }: { leads: { id: string; company: string }[] }
       <div className="grid gap-3 sm:grid-cols-2">
         <select
           value={form.type}
-          onChange={(e) => setForm({ ...form, type: e.target.value })}
+          onChange={(e) => {
+            const type = e.target.value;
+            // 種別変更時に、説明が空（またはテンプレート由来）ならテンプレートを自動入力
+            setForm((prev) => ({
+              ...prev,
+              type,
+              description: !prev.description.trim() || TEMPLATES[prev.type] === prev.description.trim()
+                ? TEMPLATES[type] ?? ""
+                : prev.description,
+            }));
+          }}
           className={inputCls}
         >
           {Object.entries(TASK_TYPE_LABEL).map(([key, label]) => (

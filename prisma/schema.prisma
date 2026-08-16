@@ -23,6 +23,9 @@ enum TaskType {
   FOLLOW_UP // フォローアップ
   RESEARCH // リサーチ
   REVIEW_REQUEST // 事前相談（request_review）
+  MEETING_PREP // 商談準備
+  QUOTE // 見積
+  CONTRACT // 契約
   CUSTOM // カスタム
 }
 

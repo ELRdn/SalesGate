@@ -1,8 +1,6 @@
-// Prisma設定（driver adapter方式: schema-engine/query-engineのspawn不要）
-// サンドボックス環境でもマイグレーション・クエリが動作する
+// Prisma設定（driver adapter方式: query-engineのspawn不要）
+// 注意: migrate 実行時は adapter を外す（adapter経由のmigrateはdiff検出に問題があるため）
 import { defineConfig } from "prisma/config";
-import { PrismaBetterSQLite3 } from "@prisma/adapter-better-sqlite3";
-import path from "node:path";
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
@@ -10,8 +8,4 @@ export default defineConfig({
     path: "prisma/migrations",
     seed: "node prisma/seed.ts",
   },
-  adapter: async () =>
-    new PrismaBetterSQLite3({
-      url: `file:${path.join(process.cwd(), "prisma", "dev.db")}`,
-    }),
 });

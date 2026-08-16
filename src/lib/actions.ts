@@ -195,9 +195,18 @@ export async function respondToTask(id: string, comment: string) {
 // 設定
 // ─────────────────────────────────────────────────────────────
 
-/** 設定の一括更新 */
+/** 設定の一括更新（数値設定と文字列設定に対応） */
 export async function updateSettings(entries: Record<string, string>) {
   for (const [key, value] of Object.entries(entries)) {
+    if (key === "slack_webhook_url") {
+      // 文字列設定（Slack Webhook URL）
+      await prisma.setting.upsert({
+        where: { key },
+        update: { value: value.trim() },
+        create: { key, value: value.trim() },
+      });
+      continue;
+    }
     const num = Number.parseInt(value, 10);
     if (!Number.isFinite(num) || num < 0) throw new Error(`設定値が不正です: ${key}=${value}`);
     await prisma.setting.upsert({

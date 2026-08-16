@@ -189,20 +189,21 @@ node tests/e2e-mcp.mjs http://localhost:3001
 
 ### DSH（DeepSeek Harness）
 
-`$DSH_HOME/profiles/<profile>/cordis.patch.yml` に追記します（例: web プロファイルの場合 `$DSH_HOME/profiles/web/cordis.patch.yml`）：
+`$DSH_HOME/profiles/<profile>/cordis.patch.yml` に追記します（例: web プロファイルの場合 `$DSH_HOME/profiles/web/cordis.patch.yml`）。**新規プラグインの追加は `insert` リスト形式**を使います（`- id: xxx` 形式は既存エントリの上書き専用のため、新規追加では「entry not found」でスキップされます）：
 
 ```yaml
-- id: mcp-sales-gate
-  name: '@deepseek-ai/dsh-mcp-client'
-  config:
-    serverName: sales-gate
-    transport: streamable-http
-    url: http://localhost:3001/mcp
+- insert:
+    - id: mcp-sales-gate
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: sales-gate
+        transport: streamable-http
+        url: http://localhost:3001/mcp
 ```
 
 > **ポートの注記**: `dev` サーバーの既定ポートは3000ですが、使用中の場合は3001に自動フォールバックします。上記設定は **3001 を前提**にしています。実際に起動したポートに合わせて `url` を読み替えてください。
 
-再起動後、DSH のモデルから `mcp__sales-gate__submit_draft` などのツールが直接利用できます。
+編集内容は **HMR（ファイル監視）で自動反映**されます（再起動不要）。反映後、DSH のモデルから `mcp__sales-gate__submit_draft` などのツールが直接利用できます（既存の会話には反映されないため、**新しい会話**を開いてください）。
 
 ### OpenClaw / Claude Code / Codex
 

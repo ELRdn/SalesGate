@@ -1,4 +1,4 @@
-// 認証ミドルウェア（シンプルなBasic Auth + クッキーセッション）
+// 認証プロキシ（Next.js 16 の middleware 相当）
 // 環境変数 SALESGATE_PASSWORD を設定した場合のみ認証が有効になる
 // 設定しない場合はローカル運用向けに全ルートを開放する
 import { NextResponse } from "next/server";
@@ -7,7 +7,7 @@ import type { NextRequest } from "next/server";
 const PASSWORD = process.env.SALESGATE_PASSWORD;
 const AUTH_COOKIE = "salesgate-auth";
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   // パスワード未設定 = 認証無効（ローカル運用）
   if (!PASSWORD) return NextResponse.next();
 

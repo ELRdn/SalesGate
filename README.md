@@ -35,6 +35,10 @@ SalesGate はその逆張りです。**承認ゲートがあるからこそ、AI
 | ✅ ミニCRM | リード・企業・送信履歴を自前管理（SQLite、CSV投入対応・重複チェック付き） |
 | ✅ フォローアップ自動化 | 未返信3日で追撃タスクを自動生成（最大3回）。ルールはアプリ側で構造化管理 |
 | ✅ MCPネイティブ | MCP クライアントを持つ任意のハーネスと接続可能 |
+| ✅ Slack通知 | 承認待ちの発生時に Slack Webhook へ通知（設定画面で URL 設定） |
+| ✅ CSVエクスポート | 送信履歴を `/api/export/logs` から CSV ダウンロード（BOM付きUTF-8・Excel対応・最新5000件） |
+| ✅ 認証 | `SALESGATE_PASSWORD` 設定時のみ Basic 認証を有効化（未設定ならローカル運用向けに全開放） |
+| ✅ タスクテンプレート | 商談準備（MEETING_PREP）・見積（QUOTE）・契約（CONTRACT）の種別説明が自動入力 |
 
 ## アーキテクチャ
 
@@ -112,12 +116,27 @@ pnpm prisma:seed
 pnpm dev
 ```
 
-ブラウザで http://localhost:3000 を開くと承認キュー・リード管理の UI が使えます（ポート3000が使用中の場合、3001 に自動フォールバックします）。
+ブラウザで http://localhost:3000 を開くと承認キュー・リード管理の UI が使えます（ポート3000が使用中の場合、3001 に自動フォールバックします。※Stream Deck の StreamDock がポート3000を使用している環境では常に3001 になります）。
 
 ### スクリプト実行の注意
 
 - スクリプト実行は `tsx` ではなく **Node.js ネイティブの型ストリッピング**（Node 26+）で行います。`import` 文のパスには `.ts` 拡張子を付けてください
 - 例: `tsx prisma/seed.ts` は `node prisma/seed.ts` として実行されます（package.json の scripts は既に Node.js 実行に合わせてあります）
+
+### 認証の使い方
+
+SalesGate はデフォルトでは認証なしで動作します（ローカル運用向けに全開放）。外部公開する際は環境変数 `SALESGATE_PASSWORD` を設定することで、**Basic 認証**（クッキーセッション7日）が有効になります。
+
+```bash
+# .env に設定する場合
+SALESGATE_PASSWORD=your-strong-password
+```
+
+- 環境変数として渡しても構いません（`SALESGATE_PASSWORD=xxx pnpm dev` など）
+- `SALESGATE_PASSWORD` を**設定していない場合**は認証なしで全機能を利用できます
+- 実装詳細は `src/proxy.ts` を参照してください（未設定ならローカル運用向けに全開放）
+- `.env.example` にも記載があります
+- なお、Webhook URL などの設定類は `SALESGATE_PASSWORD` とは別に、設定画面（`/settings`）で管理する項目になります
 
 ### その他のコマンド
 
@@ -133,6 +152,13 @@ pnpm dev
 
 - フォローアップの自動化は `pnpm scheduler`（1回）または `pnpm scheduler:watch`（1時間ごと）で実行します
 - 設定画面から「今すぐ実行」ボタンでも同じ処理を手動実行できます
+
+### 設定画面（`/settings`）
+
+設定画面では以下の項目を管理できます。
+
+- **Slack Webhook URL**: 承認待ちが発生したとき（`submit_draft` 成功時）に Slack へ通知するための Webhook URL を設定します。**未設定の場合は通知が無効**になり、アプリの動作には影響しません
+- **送信履歴のエクスポート**: 「エクスポート」ボタンから送信履歴を CSV でダウンロードできます。`/api/export/logs` から BOM付きUTF-8・Excel対応の CSV（最新5000件）を取得します
 
 ## テスト
 

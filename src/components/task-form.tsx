@@ -28,6 +28,7 @@ export function TaskForm({ leads }: { leads: { id: string; company: string }[] }
     title: "",
     description: "",
     leadId: "",
+    assignee: "",
     dueAt: "",
   });
 
@@ -42,9 +43,10 @@ export function TaskForm({ leads }: { leads: { id: string; company: string }[] }
           title: form.title,
           description: form.description || undefined,
           leadId: form.leadId || undefined,
+          assignee: form.assignee || undefined,
           dueAt: form.dueAt || undefined,
         });
-        setForm({ type: "CUSTOM", title: "", description: "", leadId: "", dueAt: "" });
+        setForm({ type: "CUSTOM", title: "", description: "", leadId: "", assignee: "", dueAt: "" });
         setResult("✅ タスクを作成しました");
       } catch (err) {
         setError(err instanceof Error ? err.message : "エラーが発生しました");
@@ -104,6 +106,12 @@ export function TaskForm({ leads }: { leads: { id: string; company: string }[] }
           rows={3}
           value={form.description}
           onChange={(e) => setForm({ ...form, description: e.target.value })}
+          className={`${inputCls} sm:col-span-2`}
+        />
+        <input
+          placeholder="担当エージェント名（例: research-agent / 空欄で未指定）"
+          value={form.assignee}
+          onChange={(e) => setForm({ ...form, assignee: e.target.value })}
           className={`${inputCls} sm:col-span-2`}
         />
         <input

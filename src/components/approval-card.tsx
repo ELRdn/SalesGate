@@ -70,6 +70,18 @@ export function ApprovalCard({ item }: { item: SerializedApprovalItem }) {
         </div>
       )}
 
+      {/* ハッシュ照合警告（v0.3-1）: 送信本文が承認原文と不一致 */}
+      {item.hashMismatchAt && (
+        <div className="mt-3 rounded-lg border border-red-800/50 bg-red-950/30 p-3">
+          <p className="text-xs font-semibold text-red-400">
+            ⚠️ 本文不一致を検知（{timeAgo(item.hashMismatchAt)}）
+          </p>
+          <p className="mt-1 text-xs text-zinc-400">
+            送信された本文が承認原文と一致しませんでした。監査ログに記録されています。エージェントの送信内容を確認してください。
+          </p>
+        </div>
+      )}
+
       {/* 本文 / 編集フォーム */}
       {mode === "edit" ? (
         <div className="mt-4 space-y-3">

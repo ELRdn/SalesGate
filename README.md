@@ -39,6 +39,11 @@ SalesGate はその逆張りです。**承認ゲートがあるからこそ、AI
 | ✅ CSVエクスポート | 送信履歴を `/api/export/logs` から CSV ダウンロード（BOM付きUTF-8・Excel対応・最新5000件） |
 | ✅ 認証 | `SALESGATE_PASSWORD` 設定時のみ Basic 認証を有効化（未設定ならローカル運用向けに全開放） |
 | ✅ タスクテンプレート | 商談準備（MEETING_PREP）・見積（QUOTE）・契約（CONTRACT）の種別説明が自動入力 |
+| ✅ 本文ハッシュ照合 | 承認時に本文をSHA-256でロック。送信報告時に実際に送信した本文と照合し、不一致を監査記録 |
+| ✅ リード単位の排他 | 承認待ち・送信待ちの下書きがあるリードへの二重提出をブロック（二重タッチ防止） |
+| ✅ エージェント別ビュー | タスクに担当エージェント（assignee）を指定・絞り込み。複数エージェントの並列運用に対応 |
+| ✅ 営業文作成スキル | `skills/` に B2B 営業メール文面作成・送信前チェックのスキルを同梱（natural-japanese / meiseki 連携） |
+| ✅ プレイブック共有 | 設定パッケージのエクスポート / インポート / 適用（設定画面から） |
 
 ## アーキテクチャ
 
@@ -87,11 +92,11 @@ SalesGate はその逆張りです。**承認ゲートがあるからこそ、AI
 
 | 方向 | ツール | 説明 |
 |---|---|---|
-| Agent → App | `submit_draft` | 送信予定の下書きを承認キューに提出（`agentName` パラメータで提出元エージェントを指定） |
-| Agent → App | `list_pending_tasks` | 自分宛のタスク一覧を取得 |
+| Agent → App | `submit_draft` | 送信予定の下書きを承認キューに提出（`agentName` で提出元を指定。同じリードに承認待ちが残っている間は再提出不可＝二重タッチ防止） |
+| Agent → App | `list_pending_tasks` | 自分宛のタスク一覧を取得（`assignee` で担当エージェント別に絞り込み） |
 | Agent → App | `get_approved_send_items` | 承認済み送信アイテムを **claim**（冪等・二重送信防止） |
-| Agent → App | `report_send_result` | 送信結果（成功/失敗・Message-ID）を報告 |
-| 双方向 | `create_task` / `update_task` | タスクの作成・変更（エージェントからも可能） |
+| Agent → App | `report_send_result` | 送信結果（成功/失敗・Message-ID）を報告。`sentBody`（実際に送信した本文）を渡すと承認原文との**ハッシュ照合**を実行 |
+| 双方向 | `create_task` / `update_task` | タスクの作成・変更（`assignee` で担当エージェントを指定可能） |
 | 双方向 | `search_leads` / `update_lead_status` | リードの検索・ステータス更新 |
 | Agent → App | `request_review` | 「この見積でいい？」と送信前に事前相談 |
 
@@ -145,7 +150,7 @@ SALESGATE_PASSWORD=your-strong-password
 | `pnpm scheduler` | フォローアップ生成を1回実行 |
 | `pnpm scheduler:watch` | フォローアップ生成を1時間ごとに実行（常駐） |
 | `pnpm prisma:generate` | Prisma Client を再生成 |
-| `pnpm test` | ユニットテスト（15件）を実行 |
+| `pnpm test` | ユニットテスト（36件）を実行 |
 | `pnpm test:watch` | テストをウォッチモードで実行 |
 
 #### スケジューラー
@@ -168,8 +173,8 @@ SALESGATE_PASSWORD=your-strong-password
 pnpm test
 ```
 
-- `node:test`（`--test-isolation=none` オプション付き）で15件のテストがパスします
-- 状態遷移・二重 claim・未承認送信の拒否などをカバー
+- `node:test`（`--test-isolation=none` オプション付き）で36件のテストがパスします
+- 状態遷移・二重 claim・未承認送信の拒否・本文ハッシュ照合・プレイブック検証などをカバー
 
 ### MCP E2E テスト
 
@@ -181,8 +186,8 @@ pnpm dev
 node tests/e2e-mcp.mjs http://localhost:3001
 ```
 
-- 22件の E2E テストがパスします
-- `initialize → tools/list → submit_draft → 承認 → claim → 二重claim防止 → 送信報告 → 監査ログ → 抑制チェック → request_review` の一連のフローを検証します
+- 34件の E2E テストがパスします
+- `initialize → tools/list → submit_draft → 承認 → claim → 二重claim防止 → 送信報告（ハッシュ照合含む）→ 監査ログ → 抑制チェック → リード排他 → assignee ビュー → request_review` の一連のフローを検証します
 - ※E2E 実行前にシード済みの DB（`pnpm prisma:seed`）が必要な場合があります
 
 ## エージェントの接続
@@ -204,6 +209,28 @@ node tests/e2e-mcp.mjs http://localhost:3001
 > **ポートの注記**: `dev` サーバーの既定ポートは3000ですが、使用中の場合は3001に自動フォールバックします。上記設定は **3001 を前提**にしています。実際に起動したポートに合わせて `url` を読み替えてください。
 
 編集内容は **HMR（ファイル監視）で自動反映**されます（再起動不要）。反映後、DSH のモデルから `mcp__sales-gate__submit_draft` などのツールが直接利用できます（既存の会話には反映されないため、**新しい会話**を開いてください）。
+
+### 営業文作成スキル（v0.3）
+
+SalesGate には `skills/` 配下に2つのエージェントスキル（SKILL.md 形式・Claude Code 互換）が同梱されています。
+
+| スキル | 役割 |
+|---|---|
+| `sales-email-copy` | B2B 営業メール文面作成（初回接触 / フォローアップ / 返信対応 / 休眠再活性化） |
+| `sales-message-review` | 送信前チェック（スパムワード・虚偽の主張・個人情報・AI臭） |
+
+DSH で使うには、`skill-filesystem` の `customSkillDirs` に `skills/` ディレクトリを追加します（`cordis.patch.yml` の既存エントリへの設定オーバーライド。`- id:` 形式でOK）:
+
+```yaml
+- id: skill-filesystem
+  config:
+    customSkillDirs:
+      - C:\path\to\salesgate\skills
+```
+
+- スキルは「文面作成 → 仕上げ（`natural-japanese` / `meiseki`）→ `submit_draft` で承認キューへ提出」のフローに沿って設計されています
+- 反映は HMR で自動。新しい会話のスキルカタログに `sales-email-copy` / `sales-message-review` が表示されます
+- OpenClaw / Claude Code 等でもスキルディレクトリの指定方法に従えば同様に利用可能です
 
 ### OpenClaw / Claude Code / Codex
 

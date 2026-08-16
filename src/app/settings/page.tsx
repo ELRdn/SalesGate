@@ -1,22 +1,33 @@
 import { prisma } from "@/lib/prisma";
 import { SettingsForm } from "@/components/settings-form";
+import { PlaybookSection } from "@/components/playbook-section";
 import { Badge, LEAD_STATUS_COLOR, LEAD_STATUS_LABEL } from "@/components/status-badge";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const [settings, suppressed] = await Promise.all([
+  const [settings, suppressed, playbooks] = await Promise.all([
     prisma.setting.findMany(),
     prisma.lead.findMany({
       where: { status: "SUPPRESSED" },
       orderBy: { updatedAt: "desc" },
       take: 100,
     }),
+    prisma.playbook.findMany({ orderBy: { createdAt: "desc" }, take: 100 }),
   ]);
 
   const initial: Record<string, string> = {};
   for (const s of settings) initial[s.key] = s.value;
+
+  const playbookItems = playbooks.map((p) => ({
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    version: p.version,
+    source: p.source,
+    createdAt: p.createdAt.toISOString(),
+  }));
 
   return (
     <div>
@@ -28,6 +39,8 @@ export default async function SettingsPage() {
       </div>
 
       <SettingsForm initial={initial} />
+
+      <PlaybookSection playbooks={playbookItems} />
 
       {/* 抑制リスト */}
       <div className="mt-8 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/40">

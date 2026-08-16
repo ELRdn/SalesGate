@@ -6,6 +6,7 @@ import { z } from "zod";
 import { prisma } from "./prisma";
 import { assertTransition, type ApprovalStatus } from "./approval-machine";
 import { sendSlackNotification } from "./notify";
+import { hashEmailBody, verifyEmailBody } from "./hash";
 
 /** ツール結果ヘルパー（JSONテキストを返す） */
 function textResult(obj: unknown) {
@@ -53,6 +54,19 @@ export function createSalesServer(): McpServer {
         if (lead.status === "SUPPRESSED")
           return fail("このリードは抑制リストに該当するため提出できません");
       }
+      // リード単位の排他（v0.3-2）: 同じリードに承認待ち・送信待ち・送信中の下書きがある場合は拒否（二重タッチ防止）
+      if (leadId) {
+        const existing = await prisma.approvalItem.findFirst({
+          where: {
+            leadId,
+            status: { in: ["AWAITING_APPROVAL", "APPROVED", "EDITED", "CLAIMED"] },
+          },
+        });
+        if (existing)
+          return fail(
+            "このリードには既に承認待ち・送信待ちの下書きがあります。処理が完了するまで新規提出はできません（二重タッチ防止）",
+          );
+      }
       const item = await prisma.approvalItem.create({
         data: {
           subject,
@@ -91,12 +105,16 @@ export function createSalesServer(): McpServer {
           .enum(["PENDING", "IN_PROGRESS", "DONE", "CANCELLED"])
           .optional()
           .describe("絞り込みステータス（省略時はPENDING）"),
+        assignee: z.string().optional().describe("担当エージェント名で絞り込み（エージェント別ビュー）"),
         limit: z.number().int().min(1).max(100).optional().describe("取得上限（デフォルト50）"),
       },
     },
-    async ({ status, limit }) => {
+    async ({ status, assignee, limit }) => {
       const tasks = await prisma.task.findMany({
-        where: { status: status ?? "PENDING" },
+        where: {
+          status: status ?? "PENDING",
+          ...(assignee ? { assignedTo: assignee } : {}),
+        },
         orderBy: { createdAt: "asc" },
         take: limit ?? 50,
         include: { lead: true },
@@ -109,6 +127,7 @@ export function createSalesServer(): McpServer {
           description: t.description,
           status: t.status,
           humanComment: t.humanComment,
+          assignedTo: t.assignedTo,
           dueAt: t.dueAt,
           lead: t.lead
             ? { id: t.lead.id, company: t.lead.company, contactName: t.lead.contactName, email: t.lead.email }
@@ -179,9 +198,13 @@ export function createSalesServer(): McpServer {
         success: z.boolean().describe("送信成功かどうか"),
         messageId: z.string().optional().describe("メールのMessage-ID（成功時）"),
         error: z.string().optional().describe("失敗理由（失敗時）"),
+        sentBody: z
+          .string()
+          .optional()
+          .describe("実際に送信した本文（成功時。承認原文とのハッシュ照合に使われます）"),
       },
     },
-    async ({ approvalItemId, success, messageId, error }) => {
+    async ({ approvalItemId, success, messageId, error, sentBody }) => {
       const item = await prisma.approvalItem.findUnique({ where: { id: approvalItemId } });
       if (!item) return fail(`アイテムが見つかりません: ${approvalItemId}`);
       // 状態遷移の検証（CLAIMED からのみ SENT/FAILED へ）
@@ -191,6 +214,12 @@ export function createSalesServer(): McpServer {
         return fail(e instanceof Error ? e.message : "不正な状態遷移");
       }
       const now = new Date();
+      // 本文ハッシュ照合（v0.3-1）: 送信後検証。承認時にロックした原文と、実際に送信した本文を比較する
+      // 注意: 送信後の「検知」であり「防止」ではない。不一致は監査ログとして記録される
+      let hashMatched: boolean | null = null;
+      if (success && sentBody !== undefined && sentBody.trim() !== "") {
+        hashMatched = verifyEmailBody(item.lockedHash, item.subject, sentBody);
+      }
       const updated = await prisma.approvalItem.update({
         where: { id: approvalItemId },
         data: {
@@ -198,6 +227,7 @@ export function createSalesServer(): McpServer {
           sentAt: success ? now : null,
           messageId: messageId ?? null,
           error: success ? null : (error ?? "不明なエラー"),
+          ...(hashMatched === false ? { hashMismatchAt: now } : {}),
         },
       });
       // 監査ログ（送信履歴）
@@ -220,7 +250,18 @@ export function createSalesServer(): McpServer {
           data: { touchCount: { increment: 1 }, lastTouchAt: now, nextFollowUpAt: null },
         });
       }
-      return textResult({ ok: true, status: updated.status });
+      return textResult({
+        ok: true,
+        status: updated.status,
+        ...(hashMatched !== null
+          ? {
+              hashMatched,
+              message: hashMatched
+                ? "送信本文は承認原文と一致しています"
+                : "警告: 送信本文が承認原文と一致しません（監査ログに記録されました）",
+            }
+          : {}),
+      });
     },
   );
 
@@ -234,22 +275,24 @@ export function createSalesServer(): McpServer {
       description: "タスクを作成します。エージェントが自分や他のエージェントに仕事を依頼するのに使います。",
       inputSchema: {
         type: z
-          .enum(["FOLLOW_UP", "RESEARCH", "REVIEW_REQUEST", "CUSTOM"])
+          .enum(["FOLLOW_UP", "RESEARCH", "REVIEW_REQUEST", "MEETING_PREP", "QUOTE", "CONTRACT", "CUSTOM"])
           .default("CUSTOM")
           .describe("タスク種別"),
         title: z.string().min(1).describe("タスク名"),
         description: z.string().optional().describe("詳細・指示"),
         leadId: z.string().optional().describe("関連リードID"),
+        assignee: z.string().optional().describe("担当エージェント名（エージェント別ビュー用）"),
         dueAt: z.string().optional().describe("期限（ISO8601）"),
       },
     },
-    async ({ type, title, description, leadId, dueAt }) => {
+    async ({ type, title, description, leadId, assignee, dueAt }) => {
       const task = await prisma.task.create({
         data: {
           type,
           title,
           description: description ?? null,
           leadId: leadId ?? null,
+          assignedTo: assignee ?? null,
           dueAt: dueAt ? new Date(dueAt) : null,
         },
       });
@@ -270,15 +313,17 @@ export function createSalesServer(): McpServer {
         status: z.enum(["PENDING", "IN_PROGRESS", "DONE", "CANCELLED"]).optional(),
         title: z.string().optional(),
         description: z.string().optional(),
+        assignee: z.string().optional().describe("担当エージェント名の変更"),
       },
     },
-    async ({ taskId, status, title, description }) => {
+    async ({ taskId, status, title, description, assignee }) => {
       const task = await prisma.task.update({
         where: { id: taskId },
         data: {
           status: status ?? undefined,
           title: title ?? undefined,
           description: description ?? undefined,
+          assignedTo: assignee ?? undefined,
         },
       });
       return textResult({ ok: true, id: task.id, status: task.status });

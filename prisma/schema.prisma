@@ -85,6 +85,7 @@ model Task {
   description  String?
   status       TaskStatus @default(PENDING)
   humanComment String? // 人間からの返答（request_reviewへの回答など）
+  assignedTo   String? // 担当エージェント名（エージェント別ビュー用）
   leadId       String?
   lead         Lead?      @relation(fields: [leadId], references: [id])
   dueAt        DateTime?
@@ -125,6 +126,11 @@ model ApprovalItem {
   messageId  String?
   error      String?
 
+  // 本文ハッシュ照合（承認原文 = 送信内容の保証）
+  // 承認時に本文のSHA-256をロック。report_send_result で送信本文と照合し、不一致なら記録
+  lockedHash      String?
+  hashMismatchAt  DateTime?
+
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -156,4 +162,16 @@ model MessageLog {
 model Setting {
   key   String @id
   value String
+}
+
+// プレイブック（設定＋テンプレートのJSONパッケージ。共有・適用できる）
+model Playbook {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  version     String   @default("1.0.0")
+  content     String // JSONパッケージ（settings 等）
+  source      String? // インポート元（URL・ファイル名など）
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

@@ -13,6 +13,8 @@ export interface SerializedApprovalItem {
   submittedBy: string | null;
   createdAt: string;
   approvedAt: string | null;
+  lockedHash: string | null;
+  hashMismatchAt: string | null;
   lead: { company: string; contactName: string | null; email: string } | null;
 }
 
@@ -30,6 +32,8 @@ export function serializeApprovalItem(item: any): SerializedApprovalItem {
     submittedBy: item.submittedBy,
     createdAt: item.createdAt.toISOString(),
     approvedAt: item.approvedAt ? item.approvedAt.toISOString() : null,
+    lockedHash: item.lockedHash ?? null,
+    hashMismatchAt: item.hashMismatchAt ? item.hashMismatchAt.toISOString() : null,
     lead: item.lead
       ? {
           company: item.lead.company,

@@ -14,6 +14,7 @@ export function TaskRow({
     description: string | null;
     status: string;
     humanComment: string | null;
+    assignedTo: string | null;
     dueAt: string | null;
     company: string | null;
     email: string | null;
@@ -48,6 +49,7 @@ export function TaskRow({
           <p className="mt-0.5 text-xs text-zinc-500">
             {task.company ?? "リード未紐付け"}
             {task.email ? ` <${task.email}>` : ""}
+            {task.assignedTo ? ` · 👤 ${task.assignedTo}` : ""}
             {task.dueAt ? ` · 期限 ${new Date(task.dueAt).toLocaleString("ja-JP")}` : ""}
           </p>
         </div>

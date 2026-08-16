@@ -4,6 +4,14 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaBetterSQLite3 } from "@prisma/adapter-better-sqlite3";
 import path from "node:path";
+import { createHash } from "node:crypto";
+
+// src/lib/hash.ts と同じ正規化・ハッシュ計算（テストの独立性のため再実装）
+function hashEmailBody(subject, body) {
+  const s = subject.replace(/\r\n/g, "\n").trim();
+  const b = body.replace(/\r\n/g, "\n").trim();
+  return createHash("sha256").update(`${s}\n\n${b}`, "utf8").digest("hex");
+}
 
 const BASE = process.argv[2] ?? "http://localhost:3001";
 const MCP_URL = `${BASE}/mcp`;
@@ -73,7 +81,7 @@ function toolText(res) {
 
 try {
   console.log("0. テストデータのクリーンアップ");
-  await prisma.lead.deleteMany({ where: { email: "e2e@test.local" } });
+  await prisma.lead.deleteMany({ where: { email: { in: ["e2e@test.local", "e2e2@test.local"] } } });
 
   console.log("1. initialize");
   const init = await rpc("initialize", {
@@ -130,9 +138,15 @@ try {
   check("取得結果が空", Array.isArray(emptyArr) && emptyArr.length === 0, JSON.stringify(emptyArr));
 
   console.log("6. 人間が承認（APPROVEDへ）");
+  // 注: 実際の承認は approveApprovalItem アクションが lockedHash も保存する。
+  // E2EではDB直接更新のため、ハッシュ照合の基準となる lockedHash を明示的に設定する
   await prisma.approvalItem.update({
     where: { id: itemId },
-    data: { status: "APPROVED", approvedAt: new Date() },
+    data: {
+      status: "APPROVED",
+      approvedAt: new Date(),
+      lockedHash: hashEmailBody("E2Eテストメール", "これはE2Eテストの本文です。"),
+    },
   });
 
   console.log("7. get_approved_send_items（claim）");
@@ -149,14 +163,20 @@ try {
   const againArr = toolText(again);
   check("2回目の取得は空", Array.isArray(againArr) && againArr.length === 0, JSON.stringify(againArr));
 
-  console.log("9. report_send_result（送信成功）");
+  console.log("9. report_send_result（送信成功・本文ハッシュ照合）");
   const report = await callTool("report_send_result", {
     approvalItemId: itemId,
     success: true,
     messageId: "<e2e-msg-id@test.local>",
+    sentBody: "これはE2Eテストの本文です。",
   });
   const reportObj = toolText(report);
   check("結果報告が成功", reportObj.ok === true, JSON.stringify(reportObj));
+  check(
+    "本文ハッシュ一致（hashMatched=true）",
+    reportObj.hashMatched === true,
+    JSON.stringify(reportObj),
+  );
 
   const item2 = await prisma.approvalItem.findUnique({ where: { id: itemId } });
   check("状態=送信済み", item2?.status === "SENT", item2?.status);
@@ -166,6 +186,44 @@ try {
 
   const leadAfter = await prisma.lead.findUnique({ where: { id: lead.id } });
   check("タッチカウントが+1", leadAfter?.touchCount === 1, `touchCount=${leadAfter?.touchCount}`);
+
+  console.log("9.5 本文不一致の検知（ハッシュ照合）");
+  const draft2 = await callTool("submit_draft", {
+    subject: "ハッシュ照合テスト",
+    body: "承認された本文",
+    agentName: "e2e-agent",
+  });
+  const draft2Obj = toolText(draft2);
+  check("下書き2の提出が成功", draft2Obj.ok === true, JSON.stringify(draft2Obj));
+  const itemId2 = draft2Obj.id;
+  // 人間の承認（lockedHash を保存するのは approve アクション。テストでは直接設定）
+  await prisma.approvalItem.update({
+    where: { id: itemId2 },
+    data: {
+      status: "APPROVED",
+      approvedAt: new Date(),
+      lockedHash: hashEmailBody("ハッシュ照合テスト", "承認された本文"),
+    },
+  });
+  const claimed2 = await callTool("get_approved_send_items", { agentName: "e2e-agent" });
+  const claimed2Arr = toolText(claimed2);
+  check(
+    "claimに成功（2件目）",
+    Array.isArray(claimed2Arr) && claimed2Arr.length === 1 && claimed2Arr[0].id === itemId2,
+    JSON.stringify(claimed2Arr),
+  );
+  // 承認された本文と「異なる」本文を送信したと報告 → 不一致を検知
+  const report2 = await callTool("report_send_result", {
+    approvalItemId: itemId2,
+    success: true,
+    messageId: "<e2e-msg-id2@test.local>",
+    sentBody: "改ざんされた本文（承認原文と不一致）",
+  });
+  const report2Obj = toolText(report2);
+  check("報告は成功する（SENT）", report2Obj.ok === true && report2Obj.status === "SENT", JSON.stringify(report2Obj));
+  check("hashMatched=false で不一致を検知", report2Obj.hashMatched === false, JSON.stringify(report2Obj));
+  const item2b = await prisma.approvalItem.findUnique({ where: { id: itemId2 } });
+  check("hashMismatchAt が記録される", item2b?.hashMismatchAt != null, JSON.stringify(item2b?.hashMismatchAt));
 
   console.log("10. 抑制リストチェック（SUPPRESSEDリードへの提出ブロック）");
   await prisma.lead.update({ where: { id: lead.id }, data: { status: "SUPPRESSED" } });
@@ -178,6 +236,73 @@ try {
   const blockedObj = toolText(blocked);
   check("ブロックされる", blockedObj.ok === false, JSON.stringify(blockedObj));
 
+  console.log("10.5 リード単位の排他（承認待ちがある間は再提出できない）");
+  const lead2 = await prisma.lead.create({
+    data: { company: "E2E排他テスト社", contactName: "排他太郎", email: "e2e2@test.local" },
+  });
+  const draft3 = await callTool("submit_draft", {
+    subject: "排他テスト1",
+    body: "本文1",
+    leadId: lead2.id,
+    agentName: "e2e-agent",
+  });
+  const draft3Obj = toolText(draft3);
+  check("1件目は提出できる", draft3Obj.ok === true, JSON.stringify(draft3Obj));
+  const draft4 = await callTool("submit_draft", {
+    subject: "排他テスト2",
+    body: "本文2",
+    leadId: lead2.id,
+    agentName: "e2e-agent",
+  });
+  const draft4Obj = toolText(draft4);
+  check(
+    "承認待ちがある間は2件目を拒否",
+    draft4Obj.ok === false && /二重タッチ防止/.test(draft4Obj.error ?? ""),
+    JSON.stringify(draft4Obj),
+  );
+
+  console.log("10.6 リード単位の排他（送信完了後は再提出できる）");
+  await prisma.approvalItem.updateMany({
+    where: { leadId: lead2.id },
+    data: { status: "APPROVED", approvedAt: new Date(), lockedHash: hashEmailBody("排他テスト1", "本文1") },
+  });
+  const claimed3 = await callTool("get_approved_send_items", { agentName: "e2e-agent" });
+  const claimed3Arr = toolText(claimed3);
+  check(
+    "claimに成功（排他テスト）",
+    Array.isArray(claimed3Arr) && claimed3Arr.length === 1,
+    JSON.stringify(claimed3Arr),
+  );
+  await callTool("report_send_result", {
+    approvalItemId: claimed3Arr[0].id,
+    success: true,
+    sentBody: "本文1",
+  });
+  const draft5 = await callTool("submit_draft", {
+    subject: "排他テスト3",
+    body: "本文3",
+    leadId: lead2.id,
+    agentName: "e2e-agent",
+  });
+  const draft5Obj = toolText(draft5);
+  check("送信完了後は再提出できる", draft5Obj.ok === true, JSON.stringify(draft5Obj));
+
+  console.log("10.7 エージェント別タスクビュー（assignee）");
+  await callTool("create_task", { type: "RESEARCH", title: "エージェントA宛タスク", assignee: "agent-a" });
+  await callTool("create_task", { type: "RESEARCH", title: "エージェントB宛タスク", assignee: "agent-b" });
+  const tasksA = toolText(await callTool("list_pending_tasks", { assignee: "agent-a" }));
+  check(
+    "agent-a のタスクのみ見える",
+    Array.isArray(tasksA) && tasksA.length === 1 && tasksA[0].title === "エージェントA宛タスク" && tasksA[0].assignedTo === "agent-a",
+    JSON.stringify(tasksA),
+  );
+  const tasksB = toolText(await callTool("list_pending_tasks", { assignee: "agent-b" }));
+  check(
+    "agent-b のタスクのみ見える",
+    Array.isArray(tasksB) && tasksB.length === 1 && tasksB[0].title === "エージェントB宛タスク",
+    JSON.stringify(tasksB),
+  );
+
   console.log("11. request_review（事前相談）");
   const review = await callTool("request_review", {
     subject: "この見積でいい？",
@@ -188,10 +313,12 @@ try {
   check("事前相談タスクが作成される", reviewObj.ok === true, JSON.stringify(reviewObj));
 
   console.log("12. クリーンアップ");
-  await prisma.messageLog.deleteMany({ where: { approvalItemId: itemId } });
-  await prisma.approvalItem.deleteMany({ where: { leadId: lead.id } });
-  await prisma.task.deleteMany({ where: { leadId: lead.id } });
-  await prisma.lead.delete({ where: { id: lead.id } });
+  await prisma.messageLog.deleteMany({ where: { approvalItemId: { in: [itemId, itemId2] } } });
+  await prisma.approvalItem.deleteMany({ where: { OR: [{ leadId: lead.id }, { leadId: lead2.id }, { id: itemId2 }] } });
+  await prisma.task.deleteMany({
+    where: { OR: [{ leadId: lead.id }, { leadId: lead2.id }, { title: { in: ["エージェントA宛タスク", "エージェントB宛タスク"] } }] },
+  });
+  await prisma.lead.deleteMany({ where: { id: { in: [lead.id, lead2.id] } } });
   console.log("  🧹 テストデータ削除完了");
 
   console.log(`\n=== E2E結果: ${pass} passed / ${fail} failed ===`);

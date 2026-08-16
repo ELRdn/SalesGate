@@ -7,19 +7,33 @@ import { prisma } from "./prisma";
 import { assertTransition, type ApprovalStatus } from "./approval-machine";
 import { parseCsvLeads } from "./csv";
 import { runFollowUpGeneration } from "./followup";
+import { hashEmailBody } from "./hash";
+import {
+  KNOWN_SETTING_KEYS,
+  NUMERIC_SETTING_KEYS,
+  STRING_SETTING_KEYS,
+  buildPlaybookContent,
+  parsePlaybookContent,
+  validatePlaybook,
+  type PlaybookContent,
+} from "./playbook.ts";
 
 // ─────────────────────────────────────────────────────────────
 // 承認キュー
 // ─────────────────────────────────────────────────────────────
 
-/** 承認（送信待ちへ） */
+/** 承認（送信待ちへ）。承認時に本文のSHA-256をロック（ハッシュ照合の基準） */
 export async function approveApprovalItem(id: string) {
   const item = await prisma.approvalItem.findUnique({ where: { id } });
   if (!item) throw new Error("アイテムが見つかりません");
   assertTransition(item.status as ApprovalStatus, "APPROVED");
   await prisma.approvalItem.update({
     where: { id },
-    data: { status: "APPROVED", approvedAt: new Date() },
+    data: {
+      status: "APPROVED",
+      approvedAt: new Date(),
+      lockedHash: hashEmailBody(item.subject, item.body),
+    },
   });
   revalidatePaths();
 }
@@ -55,6 +69,7 @@ export async function editAndApproveApprovalItem(
       editedBody: body.trim(),
       approvedAt: new Date(),
       feedback: note?.trim() || null,
+      lockedHash: hashEmailBody(subject.trim(), body.trim()),
     },
   });
   revalidatePaths();
@@ -157,6 +172,7 @@ export async function createTask(input: {
   title: string;
   description?: string;
   leadId?: string;
+  assignee?: string;
   dueAt?: string;
 }) {
   if (!input.title.trim()) throw new Error("タスク名は必須です");
@@ -166,6 +182,7 @@ export async function createTask(input: {
       title: input.title.trim(),
       description: input.description?.trim() || null,
       leadId: input.leadId || null,
+      assignedTo: input.assignee?.trim() || null,
       dueAt: input.dueAt ? new Date(input.dueAt) : null,
     },
   });
@@ -229,4 +246,83 @@ export async function runFollowUpsNow() {
 function revalidatePaths() {
   revalidatePath("/approvals");
   revalidatePath("/");
+}
+
+// ─────────────────────────────────────────────────────────────
+// プレイブック共有
+// ─────────────────────────────────────────────────────────────
+
+/** プレイブックの settings をSettingテーブルへ適用する共通ロジック（revalidateなし） */
+async function applySettingsFromPlaybook(content: PlaybookContent) {
+  for (const key of KNOWN_SETTING_KEYS) {
+    const raw = content.settings[key];
+    // プレイブックに無いキーはスキップ（既存設定を崩さない）
+    if (raw === undefined || raw === null || raw === "") continue;
+
+    let value: string;
+    if ((STRING_SETTING_KEYS as readonly string[]).includes(key)) {
+      value = raw.trim();
+    } else if ((NUMERIC_SETTING_KEYS as readonly string[]).includes(key)) {
+      const num = Number.parseInt(raw, 10);
+      if (!Number.isFinite(num) || num < 0) {
+        throw new Error(`プレイブックの設定値が不正です: ${key}=${raw}`);
+      }
+      value = String(num);
+    } else {
+      value = raw;
+    }
+
+    await prisma.setting.upsert({
+      where: { key },
+      update: { value },
+      create: { key, value },
+    });
+  }
+}
+
+/** 現在の設定からプレイブックJSON文字列をエクスポート */
+export async function exportPlaybook(): Promise<string> {
+  const settings = await prisma.setting.findMany();
+  const map: Record<string, string> = {};
+  for (const s of settings) map[s.key] = s.value;
+  return JSON.stringify(buildPlaybookContent(map), null, 2);
+}
+
+/** プレイブックをインポートして適用。成功時は { id, name, applied } を返す */
+export async function importPlaybook(
+  jsonText: string,
+): Promise<{ id: string; name: string; applied: boolean }> {
+  const result = validatePlaybook(jsonText);
+  if (!result.ok) throw new Error(result.error);
+  const content = result.content;
+
+  await applySettingsFromPlaybook(content);
+
+  const playbook = await prisma.playbook.create({
+    data: {
+      name: content.name,
+      description: content.description ?? null,
+      version: content.version ?? "1.0.0",
+      content: JSON.stringify(content),
+      source: "manual",
+    },
+  });
+
+  revalidatePath("/settings");
+  return { id: playbook.id, name: playbook.name, applied: true };
+}
+
+/** 保存済みプレイブックを読み込み、settings を適用 */
+export async function applyPlaybook(id: string) {
+  const playbook = await prisma.playbook.findUnique({ where: { id } });
+  if (!playbook) throw new Error("プレイブックが見つかりません");
+  const content = parsePlaybookContent(playbook.content);
+  await applySettingsFromPlaybook(content);
+  revalidatePath("/settings");
+}
+
+/** 保存済みプレイブックを削除 */
+export async function deletePlaybook(id: string) {
+  await prisma.playbook.delete({ where: { id } });
+  revalidatePath("/settings");
 }

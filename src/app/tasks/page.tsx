@@ -39,6 +39,7 @@ export default async function TasksPage() {
               description: task.description,
               status: task.status,
               humanComment: task.humanComment,
+              assignedTo: task.assignedTo,
               dueAt: task.dueAt?.toISOString() ?? null,
               company: task.lead?.company ?? null,
               email: task.lead?.email ?? null,

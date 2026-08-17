@@ -1,6 +1,10 @@
-# SalesGate DESIGN.md — 技術設計ドキュメント
+---
+title: SalesGate 技術設計ドキュメント
+description: 承認ファーストAI SDRハブのアーキテクチャ・データフロー・MCPツール一覧
+last_updated: 2026-08-16
+---
 
-最終更新: 2026-08-16
+# SalesGate DESIGN.md — 技術設計ドキュメント
 
 ---
 

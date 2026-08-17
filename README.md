@@ -229,6 +229,7 @@ DSH で使うには、`skill-filesystem` の `customSkillDirs` に `skills/` デ
 ```
 
 - スキルは「文面作成 → 仕上げ（`natural-japanese` / `meiseki`）→ `submit_draft` で承認キューへ提出」のフローに沿って設計されています
+- **v1 を本採用**（個別観察からの導入・抵抗最小化CTA・CTA単一性チェックを追加）。スキルなし/あり（v0/v1）の比較テストと検証結果は [docs/skill-comparison.md](./docs/skill-comparison.md) を参照
 - 反映は HMR で自動。新しい会話のスキルカタログに `sales-email-copy` / `sales-message-review` が表示されます
 - OpenClaw / Claude Code 等でもスキルディレクトリの指定方法に従えば同様に利用可能です
 

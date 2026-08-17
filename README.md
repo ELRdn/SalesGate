@@ -237,6 +237,10 @@ DSH で使うには、`skill-filesystem` の `customSkillDirs` に `skills/` デ
 
 各ハーネスの MCP クライアント設定に `http://localhost:3001/mcp`（streamable-http）を追加してください。**同じ MCP サーバーに複数ハーネスを同時接続可能**です（claim 制により二重送信は発生しません）。
 
+## 設計ドキュメント
+
+アーキテクチャ・データフロー・MCPツール一覧などは [DESIGN.md](./DESIGN.md) を参照してください。
+
 ## ロードマップ
 
 実装計画・マイルストーンは [roadmap.md](./roadmap.md) を参照してください。

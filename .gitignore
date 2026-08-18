@@ -32,6 +32,10 @@ prisma/dev.db-journal
 # TypeScript incremental build info
 *.tsbuildinfo
 
+# UIテスト用ファイル
+salesgate-design-test/
+salesgate-design-test.zip
+
 # misc
 .DS_Store
 *.pem

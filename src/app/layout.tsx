@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Nav } from "@/components/nav";
+import { Shell } from "@/components/shell";
 
 export const metadata: Metadata = {
   title: "SalesGate — Approval-first AI SDR Hub",
@@ -10,9 +10,8 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ja">
-      <body className="min-h-screen bg-zinc-950 text-zinc-100 antialiased">
-        <Nav />
-        <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
+      <body>
+        <Shell>{children}</Shell>
       </body>
     </html>
   );

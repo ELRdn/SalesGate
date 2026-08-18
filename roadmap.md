@@ -116,13 +116,22 @@
 
 > **営業文作成スキル v1 本採用（2026-08-16）**: v0 と v1 の比較テストを実施（4パターン×2ラウンド・ブラインド評価）。`skills/` を v1 に更新。詳細は `docs/skill-comparison.md` を参照。
 
-## v0.4（OSS公開準備）
+## v0.4（OSS公開準備 + v2 UI）
 
+- [x] **DESIGN.md リニューアル**（ARCHITECTURE.md 分離 + UI Design System 作成。16セクション、designmd lint 合格）
+- [x] **ApprovalCard UI 改善**（border-t セパレーター、`<article>`/`<section>` セマンティクス、`focus-visible`、`<label>` ラッピング、`font-mono` ID 表示、`min-h-9` タッチターゲット）
+- [x] **v2 UI Phase 1: インフラ移植**（lucide-react、neavy色系 CSS、サイドバー + トップバー + Shell）
+- [x] **v2 UI Phase 2: ダッシュボード再実装**（KPI 4カード、承認キュー dense rows、タスクサマリー、送信推移チャート、リスクアラート、アクティビティ）
+- [x] **v2 UI Phase 3: 承認キュー マスターディテール**（キューリスト + 詳細パネル、編集/却下モーダル、フィルタ/検索）
+- [x] **v2 UI Phase 4: 全ページ移行**（リード、タスク、設定、送信履歴、抑制リスト、プレイブック）
+- [ ] v2 UI Phase 5: テスト更新（E2E セレクタ修正）+ DESIGN.md と NEWDESIGN.md のマージ
 - [ ] ライセンス選定（MIT 想定）
 - [ ] GitHub 公開（README 最終化・リポジトリ構成整備）
 - [ ] デプロイガイド（Vercel / ローカル運用）
 - [ ] エージェント別セットアップガイド（DSH / OpenClaw / Claude Code の MCP 接続・Gmail MCP 設定）
-- [ ] マルチテナント対応（v0.3 から繰り上げ・OSS 公開前に実装）
+- [ ] マルチテナント対応（OSS 公開前に実装）
+
+> **v2 UI 統合メモ（2026-08-18）**: v2 prototype（`salesgate-newui-v2/`）から正規移植。色ベースが zinc 系 → neavy 系（#0B1320）に変更。ナビゲーションが水平トップバー → サイドバー（226px）に変更。アイコンが emoji → lucide-react に変更。NEWDESIGN.md は実験的設計書として維持。将来 DESIGN.md へマージ予定。
 
 ## 未検証リスク（実装前に確認が必要な事項）
 

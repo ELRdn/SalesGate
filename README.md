@@ -239,7 +239,8 @@ DSH で使うには、`skill-filesystem` の `customSkillDirs` に `skills/` デ
 
 ## 設計ドキュメント
 
-アーキテクチャ・データフロー・MCPツール一覧などは [DESIGN.md](./DESIGN.md) を参照してください。
+- [DESIGN.md](./DESIGN.md) — UI / UX / Visual Design System（UI再現用Single Source of Truth）
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — アーキテクチャ・データフロー・MCPツール一覧
 
 ## ロードマップ
 

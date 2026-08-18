@@ -74,7 +74,7 @@
   - Webhook URL は設定画面（`/settings`）の「Slack Webhook URL」欄で設定
   - 未設定なら通知無効（アプリの動作には影響しない）
 - [x] **認証（シングルユーザー向け）**
-  - 環境変数 `SALESGATE_PASSWORD` を設定した場合のみ Basic 認証を有効化（クッキーセッション7日、`src/middleware.ts`）
+  - 環境変数 `SALESGATE_PASSWORD` を設定した場合のみ Basic 認証を有効化（クッキーセッション7日、`src/proxy.ts`）
   - 未設定ならローカル運用向けに全開放
   - `.env.example` に記載・GitHub 公開準備が完了
 - [x] **送信履歴のエクスポート（CSV）**

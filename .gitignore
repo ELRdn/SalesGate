@@ -32,11 +32,14 @@ prisma/dev.db-journal
 # TypeScript incremental build info
 *.tsbuildinfo
 
-# UIテスト用ファイル
+# UIテスト用プロトタイプ（本体へ移植済み）
 salesgate-design-test/
 salesgate-design-test.zip
+salesgate-newui-v2/
+salesgate-newui-v2.zip
 
 # misc
 .DS_Store
 *.pem
 next-env.d.ts
+.gitconfig.global

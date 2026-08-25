@@ -1,55 +1,38 @@
-"use client";
+import { prisma } from "@/lib/prisma";
+import { HistoryClient } from "@/components/history-client";
 
-import { CheckCircle2, Download, Search, ShieldCheck, ShieldX, XCircle } from "lucide-react";
-import { useMemo, useState } from "react";
-import { sendHistory } from "@/data/mock";
-import { AgentChip, PageHeader, Panel } from "@/components/ui";
+export const dynamic = "force-dynamic";
 
-export default function HistoryPage() {
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState("すべて");
-  const rows = useMemo(() => sendHistory.filter((x) => (filter === "すべて" || x.status === filter) && `${x.company} ${x.email} ${x.subject}`.toLowerCase().includes(query.toLowerCase())), [query, filter]);
-
-  return (
-    <div className="workspace-page">
-      <PageHeader title="送信履歴" description="承認後にエージェントが実行した送信結果と監査情報を確認します。" action={<button className="btn ghost"><Download size={15} />CSVエクスポート</button>} />
-      <div className="metric-strip">
-        <Metric label="本日送信" value="12" tone="green" />
-        <Metric label="成功率" value="96.2%" tone="blue" />
-        <Metric label="送信失敗" value="1" tone="red" />
-        <Metric label="本文不一致" value="1" tone="amber" />
-      </div>
-      <Panel className="data-panel">
-        <div className="data-toolbar">
-          <label className="search-box wide"><Search size={15} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="送信先・件名を検索" /></label>
-          <select className="standalone-select" value={filter} onChange={(e) => setFilter(e.target.value)}>
-            <option>すべて</option><option>送信済み</option><option>送信失敗</option><option>本文不一致</option>
-          </select>
-        </div>
-        <div className="data-table history-table">
-          <div className="table-head"><span>送信先</span><span>件名</span><span>Agent</span><span>結果</span><span>本文Hash</span><span>送信日時</span></div>
-          {rows.map((item) => (
-            <div className="table-row static" key={item.id}>
-              <span className="lead-main"><strong>{item.company}</strong><small>{item.email}</small></span>
-              <span className="truncate-cell">{item.subject}</span>
-              <span><AgentChip agent={item.agent} /></span>
-              <span><HistoryStatus status={item.status} /></span>
-              <span className={`hash-state ${item.hash === "一致" ? "ok" : item.hash === "不一致" ? "bad" : ""}`}>
-                {item.hash === "一致" ? <ShieldCheck size={14} /> : item.hash === "不一致" ? <ShieldX size={14} /> : null}{item.hash}
-              </span>
-              <span>{item.sentAt}</span>
-            </div>
-          ))}
-        </div>
-      </Panel>
-    </div>
-  );
-}
-
-function Metric({ label, value, tone }: { label: string; value: string; tone: string }) {
-  return <div className="mini-metric"><i className={tone} /><span>{label}<small>直近24時間</small></span><strong>{value}</strong></div>;
-}
-function HistoryStatus({ status }: { status: string }) {
-  const cls = status === "送信済み" ? "sent" : status === "送信失敗" ? "failed" : "rejected";
-  return <span className={`status-pill ${cls}`}>{status === "送信済み" ? <CheckCircle2 size={12} /> : status === "送信失敗" ? <XCircle size={12} /> : null}{status}</span>;
+export default async function HistoryPage() {
+  const logs = await prisma.messageLog.findMany({ orderBy: { sentAt: "desc" }, include: { lead: true, approvalItem: true }, take: 500 });
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const todayCount = logs.filter((l) => new Date(l.sentAt) >= startOfDay).length;
+  const sentCount = logs.filter((l) => l.status === "SENT").length;
+  const failedCount = logs.filter((l) => l.status === "FAILED").length;
+  const mismatchCount = await prisma.approvalItem.count({ where: { hashMismatchAt: { not: null } } });
+  const successRate = logs.length > 0 ? ((sentCount / logs.length) * 100).toFixed(1) + "%" : "—";
+  const serialized = logs.map((l) => ({
+    id: l.id,
+    company: l.lead?.company ?? "—",
+    email: l.lead?.email ?? "—",
+    subject: l.subject,
+    agent: l.sentBy ?? "—",
+    status: (() => {
+      if (l.status === "SENT") {
+        if (l.approvalItem?.hashMismatchAt) return "本文不一致";
+        return "送信済み";
+      }
+      return "送信失敗";
+    })(),
+    hash: (() => {
+      if (l.approvalItem?.hashMismatchAt) return "不一致";
+      if (l.approvalItem?.lockedHash) return "一致";
+      return "未検証";
+    })(),
+    sentAt: l.sentAt.toISOString(),
+    sentAtLabel: new Date(l.sentAt).toLocaleString("ja-JP"),
+    messageId: l.messageId ?? "—",
+  }));
+  return <HistoryClient initialLogs={serialized} metrics={{ todayCount, successRate, failedCount, mismatchCount }} />;
 }

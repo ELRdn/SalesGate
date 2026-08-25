@@ -79,17 +79,20 @@ These patterns are **prohibited** in SalesGate UI:
 
 ### 5.1 Colors
 
-SalesGate uses a **dark zinc palette** with semantic accent tokens. The design system uses Tailwind CSS v4 utility classes mapped to semantic purposes.
+SalesGate uses a **dark navy palette (v2)** with semantic accent tokens. The primary background is **#0B1320 (neavy)**. Tailwind CSS v4 utilities are mapped to CSS variables in `src/app/globals.css`.
+
+> **v2 change:** zinc-950 → #0B1320. All surfaces derived from `--bg`, `--surface`, `--border` variables. See `globals.css` for canonical values.
 
 #### Background
 
-| Token | Tailwind | Usage |
+| Token | Value / Tailwind | Usage |
 |---|---|---|
-| `--bg-app` | `bg-zinc-950` | App background, page background |
-| `--bg-surface` | `bg-zinc-900/60` | Cards, panels, elevated surfaces |
-| `--bg-surface-solid` | `bg-zinc-900` | Forms, inputs, filter bars |
-| `--bg-inset` | `bg-zinc-950/60` | Nested content areas within cards |
-| `--bg-elevated` | `bg-zinc-800` | Buttons (ghost/secondary), active states |
+| `--bg` | `#0B1320` | App background (`body`) |
+| `--bg-app` | `bg-zinc-950` (legacy) / `var(--bg)` | App background, page background |
+| `--bg-surface` | `bg-zinc-900/60` / `var(--surface)` (`#142131`) | Cards, panels, elevated surfaces |
+| `--bg-surface-solid` | `bg-zinc-900` / `var(--surface-2)` (`#172638`) | Forms, inputs, filter bars |
+| `--bg-inset` | `bg-zinc-950/60` / `var(--surface-3)` (`#1a2a3d`) | Nested content areas within cards |
+| `--bg-elevated` | `bg-zinc-800` / `var(--surface)` | Buttons (ghost/secondary), active states |
 
 #### Border
 
@@ -227,20 +230,17 @@ SalesGate uses **minimal shadows**. The primary depth mechanism is background op
 
 ### 5.7 Icons
 
-- Icons are **inline emoji** (not icon libraries) for simplicity and universal rendering
-- Standard icon mapping:
-  - ✅ Approve / Success
-  - ✏️ Edit
-  - ❌ Reject / Close
-  - 📋 Evidence / Document
-  - ⚠️ Risk / Warning
-  - 🔁 Retry
-  - 📝 Feedback / Memo
-  - 📤 Sent
-  - 🗄 Archive
-  - 🚦 Brand (SalesGate traffic light)
-- Emoji are **never used as the sole indicator** — always paired with text labels
-- Exception: Status badge emoji are supplementary (text is the primary signal)
+- **v2: `lucide-react` (v1.31+)** — all icons are Lucide React components (`size` prop, `strokeWidth={1.8}`)
+- Legacy emoji mapping (retained for conceptual reference, not used in v2 code):
+  - ✅ Approve → `Check` / `CheckCircle2`
+  - ✏️ Edit → `Pen` (via edit modal)
+  - ❌ Reject → `X` / `ShieldAlert`
+  - 📋 Evidence → `FileSearch`
+  - ⚠️ Risk → `ShieldAlert` / `CircleAlert`
+  - 🔁 Retry → `RefreshCw`
+  - 🚦 Brand → `traffic-mark` CSS (3 dots) + `SalesGate` wordmark
+- Icons are **always paired with text labels** — never icon-only
+- Status badge icons are supplementary (text is primary signal)
 
 ---
 
@@ -263,25 +263,24 @@ SalesGate uses **minimal animation**. Motion is functional, not decorative.
 
 ## 6. Application Shell
 
-### 6.1 Desktop Layout
+### 6.1 Desktop Layout (v2)
 
 ```
-+-----------------------------------------------------------+
-| 🚦 SalesGate  [ダッシュボード] [承認キュー] [リード] ...      |  <- Sticky top nav
-+-----------------------------------------------------------+
-|                                                           |
-|  +-----------------------------------------------------+  |
-|  |  Page Content                                       |  |
-|  |  max-w-6xl (1152px)                                 |  |
-|  |  px-6 py-8                                          |  |
-|  +-----------------------------------------------------+  |
-|                                                           |
-+-----------------------------------------------------------+
++--------+------------------------------+
+|        | Topbar (62px, sticky)        |
+| Side-  +------------------------------+
+| bar    | Main area (padding 18px)     |
+| 226px  |  stats/content/panels        |
+| sticky |                              |
++--------+------------------------------+
 ```
 
-- **No sidebar.** Navigation is a horizontal top bar.
-- Content is **centered** with `max-w-6xl mx-auto`.
-- Page padding: `px-6` horizontal, `py-8` vertical.
+- **v2: Sidebar 226px** (`grid-template-columns: 226px 1fr`) — persistent left nav (`src/components/sidebar.tsx`)
+- **Topbar 62px** sticky (`src/components/topbar.tsx`) — search, notifications, profile
+- **Shell**: `.app-shell { display: grid; grid-template-columns: 226px 1fr; grid-template-rows: 62px 1fr; }` — see `globals.css`
+- Collapsed mode: `76px` (icon-only) at `<920px` or via toggle
+- Mobile `<640px`: sidebar hidden, single column, stacked layout
+- **DEPRECATED (v1)**: No sidebar / centered `max-w-6xl` — retained for reference only. v2 is canonical.
 
 ### 6.2 Mobile Layout
 
@@ -290,22 +289,28 @@ SalesGate uses **minimal animation**. Motion is functional, not decorative.
 - Approval cards stack vertically.
 - Action buttons wrap to multiple rows on small screens.
 
-### 6.3 Navigation Bar (Nav)
+### 6.3 Navigation (v2: Sidebar + Topbar)
+
+**Sidebar** (`src/components/sidebar.tsx` — 226px, sticky):
 
 ```
-+------------------------------------------------------------------+
-| 🚦 SalesGate     [ダッシュボード] [承認キュー] [リード] ...        |
-|  emerald-400         zinc-300 (hover: white + zinc-800 bg)       |
-+------------------------------------------------------------------+
++--------------+
+| traffic-mark |
+| SalesGate    |  <- .brand-row (62px, border-bottom)
++--------------+
+| [Icon] Label |  <- .nav-item (43px, hover #142337, active linear-gradient #18375d)
+|  badge 5     |
++--------------+
+| エージェント  |  <- agent-section (DSH/OpenClaw/Claude Code/Codex)
++--------------+
+| v0.4.0-beta  |  <- server-card (MCP Connected)
++--------------+
 ```
 
-- **Sticky top**: `sticky top-0 z-10`
-- **Background**: `bg-zinc-950/80 backdrop-blur` (translucent dark)
-- **Border**: `border-b border-zinc-800`
-- **Brand**: `text-emerald-400 font-bold` with 🚦 emoji
-- **Tagline**: `text-xs font-normal text-zinc-500` — "Approval-first AI SDR Hub" (hidden on mobile via `hidden sm:inline`)
-- **Links**: `text-sm text-zinc-300`, hover → `bg-zinc-800 text-white`, active → same as hover
-- **Link padding**: `rounded-md px-3 py-1.5`
+- **Brand**: `traffic-mark` (3 dots red/yellow/green) + `SalesGate` 24px + tagline `Approval-first AI SDR Hub` 12px
+- **Nav items**: `House`, `ClipboardCheck`, etc. (lucide) — `gap:10px`, `active: color #55a1ff + gradient`
+- **Topbar** (`src/components/topbar.tsx` — 62px, `rgba(11,20,33,.9) backdrop-blur`): hamburger toggle, search, `Bell` + badge, `User` avatar+name, popovers
+- **DEPRECATED (v1)**: Sticky top nav `bg-zinc-950/80` — v2 sidebar/topbar is canonical
 
 ### 6.4 Header (Page)
 
@@ -928,3 +933,15 @@ All text colors against `bg-zinc-950` background:
 | Settings | `src/app/settings/page.tsx` |
 
 > **For architecture, data flow, MCP tools, and database schema, see [ARCHITECTURE.md](./ARCHITECTURE.md).**
+
+---
+
+## 17. v2 Integration Notes (2026-08-18)
+
+- **Source of truth**: This `DESIGN.md` is canonical. `salesgate-newui-v2/` was the prototype and is now archived (gitignored). No `NEWDESIGN.md` is needed — v2 is merged here.
+- **Color migration**: zinc → neavy (`#0B1320`, `#0d1724`, `#142131`, `#263649` etc.). See `globals.css` `:root` for authoritative tokens.
+- **Shell migration**: `max-w-6xl` centered → `226px sidebar + 62px topbar + main-area`. Collapsed at 920px, hidden at 640px.
+- **Icons**: emoji → `lucide-react`. All new code must use Lucide.
+- **Components updated**: `sidebar.tsx`, `shell.tsx`, `topbar.tsx`, `ui.tsx`, `page.tsx` (dashboard), `approvals/page.tsx` (master-detail), `leads/tasks/settings/history/suppression/playbooks`.
+- **A11y**: `focus-visible: outline 2px solid #3478f6`, `EmptyState` for all empty lists, `Modal` with backdrop and explicit close, destructive actions require confirmation (`reject-warning`).
+- **Responsive**: 1240px (2-col → 1-col), 920px (sidebar collapse), 640px (single column, stacked).

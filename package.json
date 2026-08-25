@@ -1,6 +1,6 @@
 {
   "name": "salesgate",
-  "version": "0.1.0",
+  "version": "0.4.1",
   "private": true,
   "type": "module",
   "description": "Approval-first AI SDR Hub — 何も勝手に送らない。営業はAIに、判断はあなたに。",

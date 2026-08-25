@@ -7,6 +7,7 @@ import { prisma } from "./prisma";
 import { assertTransition, type ApprovalStatus } from "./approval-machine";
 import { sendSlackNotification } from "./notify";
 import { hashPayload, verifyPayload } from "./hash";
+import { VERSION } from "./version";
 
 /** ツール結果ヘルパー（JSONテキストを返す） */
 function textResult(obj: unknown) {
@@ -22,7 +23,7 @@ function fail(message: string) {
 export function createSalesServer(): McpServer {
   const server = new McpServer({
     name: "sales-gate",
-    version: "0.1.0",
+    version: VERSION,
   });
 
   // ─────────────────────────────────────────────────────────────

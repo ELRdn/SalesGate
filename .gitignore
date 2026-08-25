@@ -43,3 +43,8 @@ salesgate-newui-v2.zip
 *.pem
 next-env.d.ts
 .gitconfig.global
+
+fresh-test.db
+fresh-acceptance.db
+verify-*.mjs
+audit-*.mjs

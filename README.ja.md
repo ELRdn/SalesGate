@@ -2,6 +2,8 @@
 
 # SalesGate 🚦
 
+[![Release](https://img.shields.io/github/v/release/ELRdn/SalesGate?label=release)](https://github.com/ELRdn/SalesGate/releases) [![License: MIT](https://img.shields.io/github/license/ELRdn/SalesGate)](LICENSE) [![GHCR](https://img.shields.io/badge/GHCR-ghcr.io%2Felrdn%2Fsalesgate-blue)](https://github.com/ELRdn/SalesGate/pkgs/container/salesgate)
+
 **The human approval and execution control layer for AI sales agents.**
 
 SalesGate は、AI営業エージェントと実際の外部アクションの間に入り、人間承認を経たものだけが実行されることを保証する営業オペレーションハブです。
@@ -118,19 +120,93 @@ SalesGate はその逆張りです。**承認ゲートがあるからこそ、AI
 
 ## クイックスタート
 
+### Docker — 推奨（Git / Node.js / pnpm 不要）
+
+**Docker だけ**で起動できます。イメージは起動時に `prisma migrate deploy` を自動実行し、`DATABASE_URL=file:/data/salesgate.db` を使用します。
+
 ```bash
-# 1. 依存関係のインストール
+docker run -d \
+  --name salesgate \
+  -p 3000:3000 \
+  -e SALESGATE_PASSWORD=change-this-password \
+  -v salesgate-data:/data \
+  ghcr.io/elrdn/salesgate:latest
+# → http://localhost:3000
+```
+
+- `change-this-password` は明らかなプレースホルダです。`password` や `admin` は使わないでください。強力なランダム値を設定してください。
+- データは名前付きボリューム `salesgate-data`（`/data/salesgate.db`）に永続化されます。
+- `latest` = 最新の安定版。特定バージョンを固定するには:
+
+  ```bash
+  docker run -d --name salesgate -p 3000:3000 -e SALESGATE_PASSWORD=change-this-password -v salesgate-data:/data ghcr.io/elrdn/salesgate:v0.4.0
+  ```
+
+**Docker Compose（git clone不要）** — `docker-compose.ghcr.yml` をコピーするか以下を保存:
+
+```yaml
+services:
+  salesgate:
+    image: ghcr.io/elrdn/salesgate:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - SALESGATE_PASSWORD=${SALESGATE_PASSWORD:-}
+    volumes:
+      - salesgate-data:/data
+    restart: unless-stopped
+
+volumes:
+  salesgate-data:
+```
+
+```bash
+SALESGATE_PASSWORD=change-this-password docker compose -f docker-compose.ghcr.yml up -d
+# → http://localhost:3000
+```
+
+アップグレード（ボリュームは維持）:
+
+```bash
+docker pull ghcr.io/elrdn/salesgate:latest
+docker stop salesgate && docker rm salesgate
+docker run -d --name salesgate -p 3000:3000 -e SALESGATE_PASSWORD=change-this-password -v salesgate-data:/data ghcr.io/elrdn/salesgate:latest
+# 通常のアップグレードで `docker compose down -v` は使わないでください — -v はDBボリュームを削除します。
+```
+
+詳細は [docs/docker.md](./docs/docker.md) を参照。
+
+---
+
+### ソースから — 開発者 / コントリビューター向け
+
+**Git + Node.js 26+ + pnpm 10+** が必要です。
+
+```bash
+git clone https://github.com/ELRdn/SalesGate.git
+cd SalesGate
+
 pnpm install
 
-# 2. DB スキーマの適用 + シード（SQLite）
+# DB スキーマの適用 + シード（SQLite）
 pnpm prisma:migrate
 pnpm prisma:seed
 
-# 3. 開発サーバー起動（MCP サーバーは /mcp で同時公開）
+# 開発サーバー起動（MCP サーバーは /mcp で同時公開）
 pnpm dev
+# → http://localhost:3000（3000使用中なら3001にフォールバック）
+#   MCP: http://localhost:3000/mcp
 ```
 
 ブラウザで http://localhost:3000 を開くと承認キュー・リード管理の UI が使えます（ポート3000が使用中の場合、3001 に自動フォールバックします。※Stream Deck の StreamDock がポート3000を使用している環境では常に3001 になります）。
+
+#### ソースからのDockerビルド（開発者向け）
+
+```bash
+SALESGATE_PASSWORD=change-this-password docker compose build
+SALESGATE_PASSWORD=change-this-password docker compose up -d
+# → http://localhost:3000（docker-compose.yml の build: . を使用）
+```
 
 ### スクリプト実行の注意
 
@@ -146,27 +222,44 @@ SalesGate はデフォルトでは認証なしで動作します（ローカル�
 SALESGATE_PASSWORD=your-strong-password
 ```
 
-- 環境変数として渡しても構いません（`SALESGATE_PASSWORD=xxx pnpm dev` など）
+- 環境変数として渡しても構いません（`SALESGATE_PASSWORD=xxx pnpm dev` / `docker run -e ...`）
 - `SALESGATE_PASSWORD` を**設定していない場合**は認証なしで全機能を利用できます
 - 実装詳細は `src/proxy.ts` を参照してください（未設定ならローカル運用向けに全開放）
 - `.env.example` にも記載があります
-- なお、Webhook URL などの設定類は `SALESGATE_PASSWORD` とは別に、設定画面（`/settings`）で管理する項目になります
 
-### Deployment
+### 設定画面（`/settings`）
 
-| 環境 | 推奨 | 備考 |
-|---|---|---|
-| **Local (Node)** | ✅ 公式サポート | `pnpm dev` + SQLite `prisma/dev.db` |
-| **Docker** | ✅ 公式サポート | `docker compose up --build` — SQLiteは `/data` volumeで永続化 |
-| **VPS / Home Server** | ✅ 公式サポート | Docker推奨 |
-| **Vercel** | ❌ v0.4非サポート | SQLiteが永続化しない。将来 `Turso/libSQL` 等で対応予定 |
+設定画面では以下の項目を管理できます。
+
+- **Slack Webhook URL**: 承認待ちが発生したとき（`submit_draft` 成功時）に Slack へ通知するための Webhook URL を設定します。**未設定の場合は通知が無効**になり、アプリの動作には影響しません
+- **送信履歴のエクスポート**: 「エクスポート」ボタンから送信履歴を CSV でダウンロードできます。`/api/export/logs` から BOM付きUTF-8・Excel対応の CSV（最新5000件）を取得します
+
+## Docker
+
+詳細なタグ一覧、Compose、ボリューム、バックアップ、対応アーキテクチャは [docs/docker.md](./docs/docker.md) を参照。
+
+ローカル検証は引き続きパスします:
 
 ```bash
-# Docker (推奨 for production-like)
-SALESGATE_PASSWORD=your-long-random-password docker compose up --build
-# → http://localhost:3000
-# DBは salesgate-data volume に永続化。container recreateでも消えません。
+docker compose build
+docker compose up -d
+docker compose ps   # salesgate 起動確認
+# データは salesgate-data ボリューム（/data/salesgate.db）に永続化
 ```
+
+## Deployment
+
+| 方法 | 必要なもの | 推奨用途 |
+|---|---|---|
+| **GHCR Dockerイメージ** (`ghcr.io/elrdn/salesgate`) | Docker | 大半のユーザー — `docker run` または `docker-compose.ghcr.yml` |
+| **ソースインストール** (`pnpm dev`) | Git + Node 26+ + pnpm 10+ | コントリビューター / 開発 |
+| **Dockerソースビルド** (`docker compose up --build`) | Git + Docker | 開発 / カスタムイメージ |
+
+非対応:
+
+| 環境 | v0.4対応 | 備考 |
+|---|---|---|
+| **Vercel** | ❌ v0.4非サポート | SQLiteが永続化しない。将来 `Turso/libSQL` 等で対応予定 |
 
 SQLiteのバックアップは `prisma/dev.db` を停止中にコピーするか `VACUUM INTO` を使用してください。
 
@@ -184,13 +277,6 @@ SQLiteのバックアップは `prisma/dev.db` を停止中にコピーするか
 
 - フォローアップの自動化は `pnpm scheduler`（1回）または `pnpm scheduler:watch`（1時間ごと）で実行します
 - 設定画面から「今すぐ実行」ボタンでも同じ処理を手動実行できます
-
-### 設定画面（`/settings`）
-
-設定画面では以下の項目を管理できます。
-
-- **Slack Webhook URL**: 承認待ちが発生したとき（`submit_draft` 成功時）に Slack へ通知するための Webhook URL を設定します。**未設定の場合は通知が無効**になり、アプリの動作には影響しません
-- **送信履歴のエクスポート**: 「エクスポート」ボタンから送信履歴を CSV でダウンロードできます。`/api/export/logs` から BOM付きUTF-8・Excel対応の CSV（最新5000件）を取得します
 
 ## テスト
 
@@ -277,6 +363,7 @@ DSH で使うには、`skill-filesystem` の `customSkillDirs` に `skills/` デ
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — アーキテクチャ・データフロー・MCPツール一覧・状態遷移表
 - [SECURITY.md](./SECURITY.md) — 脆弱性報告・デプロイ警告・認証の位置づけ
 - [CONTRIBUTING.md](./CONTRIBUTING.md) — 開発手順・PRガイド
+- [docs/docker.md](./docs/docker.md) — GHCRイメージ、タグ、`docker run` / Compose、ボリューム、アップグレード、バックアップ
 - [MCP Compatibility](./docs/MCP_COMPATIBILITY.md) — SDK 1.30 / streamable-http の現状とupgrade path
 
 ## ロードマップ

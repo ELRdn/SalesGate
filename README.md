@@ -2,6 +2,8 @@
 
 # SalesGate
 
+[![Release](https://img.shields.io/github/v/release/ELRdn/SalesGate?label=release)](https://github.com/ELRdn/SalesGate/releases) [![License: MIT](https://img.shields.io/github/license/ELRdn/SalesGate)](LICENSE) [![GHCR](https://img.shields.io/badge/GHCR-ghcr.io%2Felrdn%2Fsalesgate-blue)](https://github.com/ELRdn/SalesGate/pkgs/container/salesgate)
+
 **Human approval infrastructure for AI sales agents.**
 
 Let AI agents research, draft, and prepare outbound actions — while keeping actual execution behind an explicit human approval gate.
@@ -149,7 +151,7 @@ All items below are verified against the current implementation (v0.4.0).
 | **Sales copy skills** | `skills/sales-email-copy` + `skills/sales-message-review` (SKILL.md, Claude Code-compatible; integrates with `natural-japanese` / `meiseki` for Japanese polishing) |
 | **Authentication** | `SALESGATE_PASSWORD` enables Basic Auth (cookie session, 7 days); no auth when unset — intended for local / trusted-network use |
 | **Persistence** | SQLite via Prisma 6 + `better-sqlite3` (`prisma/dev.db` locally, `/data/salesgate.db` in Docker) |
-| **Deployment** | Local Node.js and Docker (Compose) — both verified; see Deployment below |
+| **Deployment** | GHCR prebuilt image + local Node.js + Docker (Compose) — all verified; see Deployment below |
 
 ---
 
@@ -165,11 +167,71 @@ Reference prototype capture (archived, for design context only): `salesgate-newu
 
 ## Quick Start
 
-**Requirements:** Node.js 26+ (uses native type stripping — `import` paths need `.ts` extensions) and pnpm 10+.
+### Docker — Recommended (no Git / Node.js / pnpm required)
+
+Requires only **Docker** (and optionally Docker Compose). The image already runs `prisma migrate deploy` on startup and uses `DATABASE_URL=file:/data/salesgate.db`.
 
 ```bash
-git clone https://github.com/your-org/salesgate.git
-cd salesgate
+docker run -d \
+  --name salesgate \
+  -p 3000:3000 \
+  -e SALESGATE_PASSWORD=change-this-password \
+  -v salesgate-data:/data \
+  ghcr.io/elrdn/salesgate:latest
+# → http://localhost:3000
+```
+
+- Choose a strong, random `SALESGATE_PASSWORD`. `change-this-password` is an obvious placeholder — do not use `password` or `admin`.
+- Data persists in the named volume `salesgate-data` (`/data/salesgate.db`).
+- `latest` = newest stable release. Pin a version for reproducible deployments:
+
+  ```bash
+  docker run -d --name salesgate -p 3000:3000 -e SALESGATE_PASSWORD=change-this-password -v salesgate-data:/data ghcr.io/elrdn/salesgate:v0.4.0
+  ```
+
+**Docker Compose (without cloning)** — copy `docker-compose.ghcr.yml` or the snippet below:
+
+```yaml
+services:
+  salesgate:
+    image: ghcr.io/elrdn/salesgate:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - SALESGATE_PASSWORD=${SALESGATE_PASSWORD:-}
+    volumes:
+      - salesgate-data:/data
+    restart: unless-stopped
+
+volumes:
+  salesgate-data:
+```
+
+```bash
+SALESGATE_PASSWORD=change-this-password docker compose -f docker-compose.ghcr.yml up -d
+# → http://localhost:3000
+```
+
+Upgrade (volume survives):
+
+```bash
+docker pull ghcr.io/elrdn/salesgate:latest
+docker stop salesgate && docker rm salesgate
+docker run -d --name salesgate -p 3000:3000 -e SALESGATE_PASSWORD=change-this-password -v salesgate-data:/data ghcr.io/elrdn/salesgate:latest
+# Never use `docker compose down -v` during a normal upgrade — -v deletes the database volume.
+```
+
+Full Docker details: [docs/docker.md](./docs/docker.md)
+
+---
+
+### From Source — Developers / Contributors
+
+Requires **Git + Node.js 26+ + pnpm 10+** (native type stripping — `import` paths need `.ts` extensions).
+
+```bash
+git clone https://github.com/ELRdn/SalesGate.git
+cd SalesGate
 
 pnpm install
 
@@ -188,7 +250,7 @@ Notes:
 - `pnpm prisma:generate` regenerates Prisma Client after schema changes.
 - SQLite backup: copy `prisma/dev.db` while stopped, or use `VACUUM INTO`.
 
-### Useful Commands
+#### Useful Commands
 
 | Command | Description |
 |---|---|
@@ -202,6 +264,16 @@ Notes:
 | `pnpm scheduler` | Run follow-up generation once |
 | `pnpm scheduler:watch` | Run scheduler every hour |
 
+#### Source Docker Build (contributors)
+
+```bash
+SALESGATE_PASSWORD=change-this-password docker compose build
+SALESGATE_PASSWORD=change-this-password docker compose up -d
+# → http://localhost:3000  (uses build: . from docker-compose.yml)
+```
+
+---
+
 ### Authentication
 
 SalesGate runs without auth by default (intended for local use). Set `SALESGATE_PASSWORD` to enable Basic Auth:
@@ -212,7 +284,7 @@ SALESGATE_PASSWORD=your-long-random-password
 ```
 
 - Implementation: `src/proxy.ts` (cookie session, 7 days).
-- Also works as an env var: `SALESGATE_PASSWORD=xxx pnpm dev`.
+- Also works as an env var: `SALESGATE_PASSWORD=xxx pnpm dev` or `docker run -e SALESGATE_PASSWORD=...`.
 - See `.env.example`. Slack webhook and other settings are managed separately in `/settings`, not via this variable.
 
 ### Settings UI (`/settings`)
@@ -224,18 +296,16 @@ SALESGATE_PASSWORD=your-long-random-password
 
 ## Docker
 
-Verified for final acceptance (build, runtime, and SQLite persistence via volume).
+See [docs/docker.md](./docs/docker.md) for image tags, Compose files, volume, backup, and architecture notes.
+
+**Local verification (build / runtime / persistence) still passes:**
 
 ```bash
-SALESGATE_PASSWORD=your-long-random-password docker compose build
-SALESGATE_PASSWORD=your-long-random-password docker compose up -d
-# → http://localhost:3000
+docker compose build
+docker compose up -d
+docker compose ps   # salesgate running
+# data persists in salesgate-data volume at /data/salesgate.db
 ```
-
-- `docker-compose.yml` maps `salesgate-data:/data` and sets `DATABASE_URL=file:/data/salesgate.db`.
-- Data persists across `docker compose down` / `recreate` via the named volume `salesgate-data`.
-- Startup runs `prisma migrate deploy` before `next start` (see `Dockerfile`).
-- To reset: `docker compose down -v` (removes the volume and DB).
 
 Do not claim Vercel support — see Deployment below.
 
@@ -243,15 +313,20 @@ Do not claim Vercel support — see Deployment below.
 
 ## Deployment
 
+| Method | Requirements | Recommended for |
+|---|---|---|
+| **GHCR Docker image** (`ghcr.io/elrdn/salesgate`) | Docker | Most users — `docker run` or `docker-compose.ghcr.yml` |
+| **Source install** (`pnpm dev`) | Git + Node 26+ + pnpm 10+ | Contributors / development |
+| **Docker source build** (`docker compose up --build`) | Git + Docker | Development / custom images |
+
+Not supported:
+
 | Environment | v0.4 Support | Notes |
 |---|---|---|
-| Local Node.js (`pnpm dev`) | ✅ Supported | SQLite at `prisma/dev.db` |
-| Docker (`docker compose up --build`) | ✅ Supported | SQLite at `/data` via `salesgate-data` volume |
-| VPS / Home Server | ✅ Supported | Docker recommended |
 | Vercel + local SQLite | ❌ Not supported | SQLite is not persisted on serverless; future `Turso` / `libSQL` planned |
 | Multi-tenant SaaS | ❌ Not supported | Single DB file per instance (instance isolation) |
 
-See [SECURITY.md](./SECURITY.md) for exposure warnings.
+See [SECURITY.md](./SECURITY.md) for exposure warnings. `SALESGATE_PASSWORD` is basic protection for local / trusted-network use — do not expose directly to the public internet without a reverse proxy (TLS, rate limiting) and network ACLs (VPN / Tailscale / Cloudflare Access).
 
 ---
 
@@ -388,6 +463,7 @@ E2E requires a seeded DB (`pnpm prisma:seed`) in some cases.
 | [SECURITY.md](./SECURITY.md) | Security policy, deployment warnings, credential handling, known limitations |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | Development setup, scripts, project principles, PR guide |
 | [roadmap.md](./roadmap.md) | Milestones from v0.1 to v0.4 and beyond |
+| [docs/docker.md](./docs/docker.md) | GHCR image, tags, `docker run` / Compose, volume, upgrade, backup |
 | [docs/MCP_COMPATIBILITY.md](./docs/MCP_COMPATIBILITY.md) | SDK 1.30 / Streamable HTTP status and upgrade path |
 | [docs/setup-dsh.md](./docs/setup-dsh.md) | DSH setup (verified) |
 | [docs/setup-openclaw.md](./docs/setup-openclaw.md) | OpenClaw setup (example / unverified) |
@@ -417,4 +493,3 @@ No additional promises are made beyond what `roadmap.md` tracks.
 MIT — see [LICENSE](./LICENSE).
 
 Copyright (c) 2026 SalesGate Contributors.
-

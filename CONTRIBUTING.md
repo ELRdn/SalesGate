@@ -5,8 +5,8 @@ Thanks for considering a contribution!
 ## Development Setup
 
 ```bash
-git clone https://github.com/your-org/salesgate.git
-cd salesgate
+git clone https://github.com/ELRdn/SalesGate.git
+cd SalesGate
 pnpm install
 pnpm prisma:generate
 pnpm prisma:migrate

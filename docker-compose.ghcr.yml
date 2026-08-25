@@ -1,0 +1,13 @@
+services:
+  salesgate:
+    image: ghcr.io/elrdn/salesgate:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - SALESGATE_PASSWORD=${SALESGATE_PASSWORD:-}
+    volumes:
+      - salesgate-data:/data
+    restart: unless-stopped
+
+volumes:
+  salesgate-data:

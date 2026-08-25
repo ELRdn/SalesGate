@@ -1,0 +1,139 @@
+name: Publish container to GHCR
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version/tag to publish (e.g. v0.4.0) — must be an existing Git tag"
+        required: true
+        default: "v0.4.0"
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout (release)
+        if: github.event_name == 'release'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Checkout (manual dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.version }}
+          fetch-depth: 0
+
+      - name: Verify tag exists (manual dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "Requested version: ${{ inputs.version }}"
+          git fetch --tags --force
+          if ! git rev-parse --verify "refs/tags/${{ inputs.version }}" >/dev/null 2>&1; then
+            echo "::error::Tag '${{ inputs.version }}' not found. Create the tag before publishing."
+            git tag --list | head -n 20
+            exit 1
+          fi
+          echo "Checked out tag: $(git rev-parse --short HEAD) — $(git log -1 --oneline)"
+
+      - name: Prepare version outputs (manual dispatch)
+        id: version
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          VERSION="${{ inputs.version }}"
+          VERSION_NO_V="${VERSION#v}"
+          MAJOR_MINOR=$(echo "$VERSION_NO_V" | cut -d. -f1,2)
+          MAJOR=$(echo "$VERSION_NO_V" | cut -d. -f1)
+          echo "with_v=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "without_v=$VERSION_NO_V" >> "$GITHUB_OUTPUT"
+          echo "major_minor=$MAJOR_MINOR" >> "$GITHUB_OUTPUT"
+          echo "major=$MAJOR" >> "$GITHUB_OUTPUT"
+          if echo "$VERSION" | grep -q "-"; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Version: $VERSION / $VERSION_NO_V / $MAJOR_MINOR / $MAJOR (prerelease=$(grep -q -c "-" <<<"$VERSION" || true))"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata (release)
+        id: meta-release
+        if: github.event_name == 'release'
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          flavor: |
+            latest=auto
+          tags: |
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+          labels: |
+            org.opencontainers.image.title=SalesGate
+            org.opencontainers.image.description=Human approval infrastructure for AI sales agents
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.licenses=MIT
+
+      - name: Extract Docker metadata (manual dispatch)
+        id: meta-dispatch
+        if: github.event_name == 'workflow_dispatch'
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=${{ steps.version.outputs.with_v }}
+            type=raw,value=${{ steps.version.outputs.without_v }}
+            type=raw,value=${{ steps.version.outputs.major_minor }}
+            type=raw,value=latest,enable=${{ steps.version.outputs.is_prerelease == 'false' }}
+          labels: |
+            org.opencontainers.image.title=SalesGate
+            org.opencontainers.image.description=Human approval infrastructure for AI sales agents
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.licenses=MIT
+
+      - name: Build and push (release)
+        if: github.event_name == 'release'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.meta-release.outputs.tags }}
+          labels: ${{ steps.meta-release.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push (manual dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.meta-dispatch.outputs.tags }}
+          labels: ${{ steps.meta-dispatch.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

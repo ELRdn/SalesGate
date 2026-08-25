@@ -3,6 +3,8 @@ import "./globals.css";
 import { Shell } from "@/components/shell";
 import { prisma } from "@/lib/prisma";
 import { VERSION } from "@/lib/version";
+import { getLocale } from "@/i18n/locale";
+import { I18nProvider } from "@/i18n/provider";
 
 export const metadata: Metadata = {
   title: "SalesGate — Approval-first AI SDR Hub",
@@ -32,12 +34,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     agents = [];
   }
 
+  const locale = await getLocale().catch(() => "en" as const);
+
   return (
-    <html lang="ja">
+    <html lang={locale}>
       <body>
-        <Shell pendingCount={pendingCount} version={VERSION} agents={agents}>
-          {children}
-        </Shell>
+        <I18nProvider locale={locale}>
+          <Shell pendingCount={pendingCount} version={VERSION} agents={agents}>
+            {children}
+          </Shell>
+        </I18nProvider>
       </body>
     </html>
   );

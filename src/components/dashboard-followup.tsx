@@ -4,19 +4,21 @@ import { RefreshCw } from "lucide-react";
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { runFollowUpsNow } from "@/lib/actions";
+import { useI18n } from "@/i18n/provider";
 
 export function DashboardFollowupButton() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const { t } = useI18n();
 
   const handle = () => {
     startTransition(async () => {
       try {
         const result = await runFollowUpsNow();
-        alert(`${result.followUpTasksCreated} 件のフォローアップタスクを生成しました`);
+        alert(t("dashboard.followupsCreated", { count: result.followUpTasksCreated }));
         router.refresh();
       } catch (e) {
-        alert(e instanceof Error ? e.message : "生成に失敗しました");
+        alert(e instanceof Error ? e.message : t("errors.generic"));
       }
     });
   };
@@ -24,7 +26,7 @@ export function DashboardFollowupButton() {
   return (
     <button className="followup" onClick={handle} disabled={isPending}>
       <RefreshCw size={14} />
-      {isPending ? "生成中..." : "今すぐフォローアップ生成"}
+      {isPending ? t("dashboard.generating") : t("dashboard.generateFollowups")}
     </button>
   );
 }

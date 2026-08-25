@@ -8,6 +8,11 @@
 
 SalesGate は、AI営業エージェントと実際の外部アクションの間に入り、人間承認を経たものだけが実行されることを保証する営業オペレーションハブです。
 
+## UI 言語
+
+SalesGateは **English**（既定）と**日本語**に対応。**設定 → 一般 → 言語** またはプロフィールメニュー（Globe）で切替。salesgate-locale Cookieと ui.defaultLocale Settingに保存されリロード後も維持。日時表示はロケール・タイムゾーン対応。詳細は docs/i18n.md。
+
+
 ```
 Agent drafts → SalesGate → Human approves → Locks approved payload → Agent claims (one winner) → Executes → Audited
 ```

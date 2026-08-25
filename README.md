@@ -16,6 +16,10 @@ SalesGate sits between AI sales agents and real-world outbound actions. Agents c
 
 > **Positioning:** SalesGate is **the human approval and execution control layer for AI sales agents** — not a CRM, not an email marketing platform, not a generic AI sales assistant, and not an autonomous sales agent. It adds a safety gate to whatever agent or harness you already use.
 
+## UI Languages
+
+SalesGate supports **English** (default) and **日本語**. Switch in **Settings → General → Language** or via the profile menu (Globe). Preference is stored in cookie `salesgate-locale` and Setting `ui.defaultLocale` and survives reload. Dates/times are locale- and timezone-aware. See [docs/i18n.md](./docs/i18n.md).
+
 ---
 
 ## How It Works

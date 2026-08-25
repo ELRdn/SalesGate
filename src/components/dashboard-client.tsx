@@ -2,9 +2,11 @@
 
 import { CheckCircle2 } from "lucide-react";
 import { useTransition } from "react";
-import { AgentChip, RiskChip, EmptyState } from "@/components/ui";
+import { EmptyState, AgentChip } from "@/components/ui";
 import { approveApprovalItem, rejectApprovalItem } from "@/lib/actions";
 import { useRouter } from "next/navigation";
+import { useI18n } from "@/i18n/provider";
+import { riskClass } from "@/components/ui";
 
 type DashboardApproval = {
   id: string;
@@ -20,9 +22,16 @@ type DashboardApproval = {
   status: "承認待ち";
 };
 
+function riskKey(risk: DashboardApproval["risk"]): string {
+  if (risk === "高リスク") return "status.risk.high";
+  if (risk === "中リスク") return "status.risk.medium";
+  return "status.risk.low";
+}
+
 export function DashboardApprovals({ items }: { items: DashboardApproval[] }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const { t } = useI18n();
 
   const handleApprove = (id: string) => {
     startTransition(async () => {
@@ -30,20 +39,20 @@ export function DashboardApprovals({ items }: { items: DashboardApproval[] }) {
         await approveApprovalItem(id);
         router.refresh();
       } catch (e) {
-        alert(e instanceof Error ? e.message : "承認に失敗しました");
+        alert(e instanceof Error ? e.message : t("errors.approveFailed"));
       }
     });
   };
 
   const handleReject = (id: string) => {
-    const feedback = prompt("却下理由を入力してください（任意）");
+    const feedback = prompt(t("approvals.feedbackLabel"));
     if (feedback === null) return;
     startTransition(async () => {
       try {
         await rejectApprovalItem(id, feedback);
         router.refresh();
       } catch (e) {
-        alert(e instanceof Error ? e.message : "却下に失敗しました");
+        alert(e instanceof Error ? e.message : t("errors.rejectFailed"));
       }
     });
   };
@@ -51,7 +60,7 @@ export function DashboardApprovals({ items }: { items: DashboardApproval[] }) {
   if (items.length === 0) {
     return (
       <div className="approval-list">
-        <EmptyState icon={<CheckCircle2 size={30} />} title="承認待ちはありません" text="エージェントが新しい下書きを提出するとここに表示されます。" />
+        <EmptyState icon={<CheckCircle2 size={30} />} title={t("dashboard.noPending")} text={t("dashboard.noPendingDesc")} />
       </div>
     );
   }
@@ -73,19 +82,19 @@ export function DashboardApprovals({ items }: { items: DashboardApproval[] }) {
             <span>{item.note}</span>
           </div>
           <div>
-            <RiskChip risk={item.risk} />
+            <span className={riskClass[item.risk]}>{t(riskKey(item.risk))}</span>
           </div>
           <div className="actions-cell">
             <span className="row-time">{item.time}</span>
             <div>
               <button className="approve" onClick={() => handleApprove(item.id)} disabled={isPending}>
-                承認
+                {t("approvals.approve")}
               </button>
               <button className="edit" onClick={() => router.push("/approvals")}>
-                編集
+                {t("common.edit")}
               </button>
               <button className="reject" onClick={() => handleReject(item.id)} disabled={isPending}>
-                却下
+                {t("approvals.reject")}
               </button>
             </div>
           </div>

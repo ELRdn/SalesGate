@@ -5,6 +5,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AgentChip, Modal, PageHeader, Panel } from "@/components/ui";
 import { createTask } from "@/lib/actions";
+import { useI18n } from "@/i18n/provider";
 
 type TaskRow = {
   id: string;
@@ -23,13 +24,14 @@ type TaskRow = {
 };
 
 export function TasksClient({ initialTasks }: { initialTasks: TaskRow[] }) {
+  const { t } = useI18n();
   const [view, setView] = useState<"list" | "board">("list");
   const [query, setQuery] = useState("");
   const [adding, setAdding] = useState(false);
   const filtered = useMemo(() => initialTasks.filter((t) => `${t.title} ${t.company} ${t.agent}`.toLowerCase().includes(query.toLowerCase())), [initialTasks, query]);
   const router = useRouter();
 
-  const overdue = initialTasks.filter((t) => t.status === "期限超過").length;
+  const overdue = initialTasks.filter((t) => t.isOverdue).length;
   const todayDue = initialTasks.filter((t) => {
     if (!t.dueAt) return false;
     const d = new Date(t.dueAt);
@@ -38,60 +40,60 @@ export function TasksClient({ initialTasks }: { initialTasks: TaskRow[] }) {
     start.setHours(0, 0, 0, 0);
     const end = new Date(start);
     end.setDate(end.getDate() + 1);
-    return d >= start && d < end && t.status !== "完了";
+    return d >= start && d < end && t.dbStatus !== "DONE" && t.dbStatus !== "CANCELLED";
   }).length;
-  const inProgress = initialTasks.filter((t) => t.status === "進行中").length;
-  const done = initialTasks.filter((t) => t.status === "完了").length;
+  const inProgress = initialTasks.filter((t) => t.dbStatus === "IN_PROGRESS").length;
+  const done = initialTasks.filter((t) => t.dbStatus === "DONE" || t.dbStatus === "CANCELLED").length;
 
   return (
     <div className="workspace-page">
       <PageHeader
-        title="タスク"
-        description="人間とAIエージェントの営業タスクを同じキューで管理します。"
+        title={t("tasks.title")}
+        description={t("tasks.description")}
         action={
           <button className="btn primary" onClick={() => setAdding(true)}>
             <Plus size={15} />
-            タスク作成
+            {t("tasks.create")}
           </button>
         }
       />
       <div className="task-summary-cards">
-        <TaskMetric label="期限超過" value={String(overdue)} tone="red" />
-        <TaskMetric label="今日が期限" value={String(todayDue)} tone="amber" />
-        <TaskMetric label="進行中" value={String(inProgress)} tone="blue" />
-        <TaskMetric label="完了" value={String(done)} tone="green" />
+        <TaskMetric label={t("tasks.overdue")} value={String(overdue)} tone="red" />
+        <TaskMetric label={t("tasks.dueToday")} value={String(todayDue)} tone="amber" />
+        <TaskMetric label={t("tasks.inProgress")} value={String(inProgress)} tone="blue" />
+        <TaskMetric label={t("tasks.done")} value={String(done)} tone="green" />
       </div>
       <Panel className="data-panel">
         <div className="data-toolbar">
           <label className="search-box wide">
             <Search size={15} />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="タスク・企業・Agentで検索" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("tasks.searchPlaceholder")} />
           </label>
           <div className="view-switch">
             <button className={view === "list" ? "active" : ""} onClick={() => setView("list")}>
               <List size={15} />
-              一覧
+              {t("tasks.list")}
             </button>
             <button className={view === "board" ? "active" : ""} onClick={() => setView("board")}>
               <Columns3 size={15} />
-              ボード
+              {t("tasks.board")}
             </button>
           </div>
         </div>
         {view === "list" ? (
           <div className="data-table task-table">
             <div className="table-head">
-              <span>タスク</span>
-              <span>種別</span>
-              <span>担当Agent</span>
-              <span>優先度</span>
-              <span>期限</span>
-              <span>状態</span>
+              <span>{t("tasks.task")}</span>
+              <span>{t("tasks.type")}</span>
+              <span>{t("tasks.assignee")}</span>
+              <span>{t("tasks.priority")}</span>
+              <span>{t("tasks.due")}</span>
+              <span>{t("tasks.status")}</span>
             </div>
             {filtered.length === 0 ? (
               <div className="empty-state" style={{ minHeight: 120, padding: 20 }}>
-                <strong>タスクはありません</strong>
-                <span>新しいタスクを作成するか、MCPから作成してください。</span>
+                <strong>{t("tasks.noTasks")}</strong>
+                <span>{t("tasks.noTasksDesc")}</span>
               </div>
             ) : (
               filtered.map((task) => (
@@ -104,7 +106,7 @@ export function TasksClient({ initialTasks }: { initialTasks: TaskRow[] }) {
                     <TypePill type={task.type} />
                   </span>
                   <span>
-                    {task.agent !== "—" ? <AgentChip agent={task.agent as "DSH" | "OpenClaw" | "Claude Code" | "Codex"} /> : <span style={{ color: "#7f90a7", fontSize: 10 }}>未割当</span>}
+                    {task.agent !== "—" ? <AgentChip agent={task.agent as "DSH" | "OpenClaw" | "Claude Code" | "Codex"} /> : <span style={{ color: "#7f90a7", fontSize: 10 }}>{t("tasks.unassigned")}</span>}
                   </span>
                   <span>
                     <Priority priority={task.priority} />
@@ -114,7 +116,7 @@ export function TasksClient({ initialTasks }: { initialTasks: TaskRow[] }) {
                     {task.due}
                   </span>
                   <span>
-                    <TaskStatus status={task.status} />
+                    <TaskStatus dbStatus={task.dbStatus} isOverdue={task.isOverdue} />
                   </span>
                 </div>
               ))
@@ -155,25 +157,55 @@ function TypePill({ type }: { type: string }) {
   return <span className="type-pill">{type}</span>;
 }
 function Priority({ priority }: { priority: TaskRow["priority"] }) {
-  return <span className={`priority ${priority === "高" ? "high" : priority === "中" ? "mid" : "low"}`}>{priority}</span>;
+  const { t } = useI18n();
+  const label = priority === "高" ? t("tasks.high") : priority === "中" ? t("tasks.medium") : t("tasks.low");
+  const key = priority === "高" ? "high" : priority === "中" ? "mid" : "low";
+  return <span className={`priority ${key}`}>{label}</span>;
 }
-function TaskStatus({ status }: { status: TaskRow["status"] }) {
-  const key = status === "完了" ? "sent" : status === "進行中" ? "claimed" : status === "期限超過" ? "failed" : "awaiting";
-  return <span className={`status-pill ${key}`}>{status}</span>;
+function TaskStatus({ dbStatus, isOverdue }: { dbStatus: string; isOverdue: boolean }) {
+  const { t } = useI18n();
+  const statusKey = isOverdue ? "OVERDUE" : dbStatus;
+  const label = t(`status.task.${statusKey}`);
+  const klass = statusKey === "DONE" || statusKey === "CANCELLED" ? "sent" : statusKey === "IN_PROGRESS" ? "claimed" : statusKey === "OVERDUE" ? "failed" : "awaiting";
+  return <span className={`status-pill ${klass}`}>{label}</span>;
 }
 function Kanban({ items }: { items: TaskRow[] }) {
-  const columns: TaskRow["status"][] = ["未着手", "進行中", "期限超過", "完了"];
+  const { t } = useI18n();
+  // Kanban columns translated via tasks.* keys but preserve DB enum logic
+  const columns = [
+    {
+      key: "PENDING",
+      label: t("status.task.PENDING"),
+      filter: (x: TaskRow) => !x.isOverdue && x.dbStatus === "PENDING",
+    },
+    {
+      key: "IN_PROGRESS",
+      label: t("tasks.inProgress"),
+      filter: (x: TaskRow) => !x.isOverdue && x.dbStatus === "IN_PROGRESS",
+    },
+    {
+      key: "OVERDUE",
+      label: t("tasks.overdue"),
+      filter: (x: TaskRow) => x.isOverdue,
+    },
+    {
+      key: "DONE",
+      label: t("tasks.done"),
+      filter: (x: TaskRow) => x.dbStatus === "DONE" || x.dbStatus === "CANCELLED",
+    },
+  ] as const;
+
   return (
     <div className="kanban">
-      {columns.map((status) => (
-        <div className="kanban-col" key={status}>
+      {columns.map((col) => (
+        <div className="kanban-col" key={col.key}>
           <div className="kanban-head">
-            <strong>{status}</strong>
-            <span>{items.filter((x) => x.status === status).length}</span>
+            <strong>{col.label}</strong>
+            <span>{items.filter(col.filter).length}</span>
           </div>
           <div className="kanban-stack">
             {items
-              .filter((x) => x.status === status)
+              .filter(col.filter)
               .map((task) => (
                 <article className="kanban-card" key={task.id}>
                   <div>
@@ -196,6 +228,7 @@ function Kanban({ items }: { items: TaskRow[] }) {
 }
 
 function CreateTaskModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const { t } = useI18n();
   const [title, setTitle] = useState("");
   const [agent, setAgent] = useState("");
   const [dueAt, setDueAt] = useState("");
@@ -205,7 +238,7 @@ function CreateTaskModal({ onClose, onSuccess }: { onClose: () => void; onSucces
   const handle = () => {
     setError(null);
     if (!title.trim()) {
-      setError("タスク名は必須です");
+      setError(t("tasks.createError"));
       return;
     }
     startTransition(async () => {
@@ -213,34 +246,34 @@ function CreateTaskModal({ onClose, onSuccess }: { onClose: () => void; onSucces
         await createTask({ type: "CUSTOM", title: title.trim(), assignee: agent.trim() || undefined, dueAt: dueAt || undefined });
         onSuccess();
       } catch (e) {
-        setError(e instanceof Error ? e.message : "作成に失敗しました");
+        setError(e instanceof Error ? e.message : t("tasks.createError"));
       }
     });
   };
 
   return (
-    <Modal title="タスクを作成" onClose={onClose}>
+    <Modal title={t("tasks.createModalTitle")} onClose={onClose}>
       <div className="modal-body form-stack">
         <label>
-          タスク名
-          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="例: 新規リードへのフォローアップ" />
+          {t("tasks.taskName")}
+          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("tasks.taskNamePlaceholder")} />
         </label>
         <label>
-          担当エージェント（任意）
-          <input value={agent} onChange={(e) => setAgent(e.target.value)} placeholder="DSH" />
+          {t("tasks.assigneeLabel")}
+          <input value={agent} onChange={(e) => setAgent(e.target.value)} placeholder={t("tasks.agentPlaceholder")} />
         </label>
         <label>
-          期限（任意）
+          {t("tasks.dueLabel")}
           <input type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
         </label>
         {error ? <div className="modal-info danger-info">{error}</div> : null}
       </div>
       <div className="modal-actions">
         <button className="btn ghost" onClick={onClose} disabled={isPending}>
-          キャンセル
+          {t("common.cancel")}
         </button>
         <button className="btn primary" onClick={handle} disabled={isPending || !title.trim()}>
-          {isPending ? "作成中..." : "作成する"}
+          {isPending ? t("common.creating") : t("common.create")}
         </button>
       </div>
     </Modal>

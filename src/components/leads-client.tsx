@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Modal, PageHeader, Panel } from "@/components/ui";
 import { addLead, importLeadsCsv } from "@/lib/actions";
 import { timeAgo } from "@/lib/serialize";
+import { useI18n } from "@/i18n/provider";
 
 type LeadRow = {
   id: string;
@@ -23,8 +24,9 @@ type LeadRow = {
 };
 
 export function LeadsClient({ initialLeads }: { initialLeads: LeadRow[] }) {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("すべて");
+  const [status, setStatus] = useState("ALL");
   const [adding, setAdding] = useState(false);
   const [selected, setSelected] = useState<LeadRow | null>(null);
   const router = useRouter();
@@ -33,7 +35,9 @@ export function LeadsClient({ initialLeads }: { initialLeads: LeadRow[] }) {
   const filtered = useMemo(
     () =>
       initialLeads.filter(
-        (lead) => (status === "すべて" || lead.status === status) && `${lead.company} ${lead.person} ${lead.email}`.toLowerCase().includes(query.toLowerCase()),
+        (lead) =>
+          (status === "ALL" || lead.dbStatus === status) &&
+          `${lead.company} ${lead.person} ${lead.email}`.toLowerCase().includes(query.toLowerCase()),
       ),
     [initialLeads, query, status],
   );
@@ -45,7 +49,7 @@ export function LeadsClient({ initialLeads }: { initialLeads: LeadRow[] }) {
         setAdding(false);
         router.refresh();
       } catch (e) {
-        alert(e instanceof Error ? e.message : "追加に失敗しました");
+        alert(e instanceof Error ? e.message : t("leads.addError"));
       }
     });
   };
@@ -61,10 +65,10 @@ export function LeadsClient({ initialLeads }: { initialLeads: LeadRow[] }) {
       startTransition(async () => {
         try {
           const res = await importLeadsCsv(text);
-          alert(`${res.added} 件追加、${res.skipped} 件スキップしました`);
+          alert(t("leads.importSuccess", { added: res.added, skipped: res.skipped }));
           router.refresh();
         } catch (e) {
-          alert(e instanceof Error ? e.message : "インポートに失敗しました");
+          alert(e instanceof Error ? e.message : t("leads.addError"));
         }
       });
     };
@@ -78,63 +82,63 @@ export function LeadsClient({ initialLeads }: { initialLeads: LeadRow[] }) {
   return (
     <div className="workspace-page">
       <PageHeader
-        title="リード"
-        description="営業対象、接触履歴、次アクションを一元管理します。"
+        title={t("leads.title")}
+        description={t("leads.description")}
         action={
           <div className="header-actions">
             <button className="btn ghost" onClick={handleExport}>
               <Download size={15} />
-              CSV
+              {t("leads.csv")}
             </button>
             <button className="btn primary" onClick={() => setAdding(true)}>
               <Plus size={15} />
-              リード追加
+              {t("leads.addLead")}
             </button>
           </div>
         }
       />
       <div className="metric-strip">
-        <Metric label="全リード" value={String(initialLeads.length)} sub="登録済み" tone="blue" />
-        <Metric label="アクティブ" value={String(initialLeads.filter((x) => x.status === "アクティブ").length)} sub="進行中" tone="green" />
-        <Metric label="返信あり" value={String(initialLeads.filter((x) => x.status === "返信あり").length)} sub="要対応" tone="violet" />
-        <Metric label="抑制中" value={String(initialLeads.filter((x) => x.status === "抑制中").length)} sub="送信禁止" tone="red" />
+        <Metric label={t("leads.total")} value={String(initialLeads.length)} sub={t("leads.registered")} tone="blue" />
+        <Metric label={t("leads.active")} value={String(initialLeads.filter((x) => x.dbStatus === "ACTIVE").length)} sub={t("leads.inProgress")} tone="green" />
+        <Metric label={t("leads.responded")} value={String(initialLeads.filter((x) => x.dbStatus === "RESPONDED").length)} sub={t("leads.needsReply")} tone="violet" />
+        <Metric label={t("leads.suppressed")} value={String(initialLeads.filter((x) => x.dbStatus === "SUPPRESSED").length)} sub={t("leads.blocked")} tone="red" />
       </div>
       <Panel className="data-panel">
         <div className="data-toolbar">
           <label className="search-box wide">
             <Search size={15} />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="会社名・担当者・メールで検索" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("leads.searchPlaceholder")} />
           </label>
           <div className="toolbar-right">
             <label className="select-wrap">
               <Filter size={14} />
               <select value={status} onChange={(e) => setStatus(e.target.value)}>
-                <option>すべて</option>
-                <option>アクティブ</option>
-                <option>返信あり</option>
-                <option>休眠</option>
-                <option>抑制中</option>
+                <option value="ALL">{t("common.all")}</option>
+                <option value="ACTIVE">{t("status.lead.ACTIVE")}</option>
+                <option value="RESPONDED">{t("status.lead.RESPONDED")}</option>
+                <option value="SLEEPING">{t("status.lead.SLEEPING")}</option>
+                <option value="SUPPRESSED">{t("status.lead.SUPPRESSED")}</option>
               </select>
             </label>
             <button className="btn ghost compact" onClick={handleCsvImport} disabled={isPending}>
               <Upload size={14} />
-              インポート
+              {t("leads.import")}
             </button>
           </div>
         </div>
         <div className="data-table lead-table">
           <div className="table-head">
-            <span>企業 / 担当者</span>
-            <span>ステータス</span>
-            <span>メール</span>
-            <span>タッチ</span>
-            <span>最終接触</span>
-            <span>次アクション</span>
+            <span>{t("leads.companyContact")}</span>
+            <span>{t("leads.status")}</span>
+            <span>{t("leads.email")}</span>
+            <span>{t("leads.touches")}</span>
+            <span>{t("leads.lastTouch")}</span>
+            <span>{t("leads.nextAction")}</span>
           </div>
           {filtered.length === 0 ? (
             <div className="empty-state" style={{ minHeight: 120, padding: 20 }}>
-              <strong>該当するリードはありません</strong>
-              <span>検索条件を変更するか、新しいリードを追加してください。</span>
+              <strong>{t("leads.noLeads")}</strong>
+              <span>{t("leads.noLeadsDesc")}</span>
             </div>
           ) : (
             filtered.map((lead) => (
@@ -146,11 +150,11 @@ export function LeadsClient({ initialLeads }: { initialLeads: LeadRow[] }) {
                   </small>
                 </span>
                 <span>
-                  <LeadStatus status={lead.status} />
+                  <LeadStatus dbStatus={lead.dbStatus} />
                 </span>
                 <span className="truncate-cell" style={{ fontSize: 10 }}>{lead.email}</span>
-                <span>{lead.touches} 回</span>
-                <span>{lead.lastTouch ? timeAgo(lead.lastTouch) : "未接触"}</span>
+                <span>{lead.touches}</span>
+                <span>{lead.lastTouch ? timeAgo(lead.lastTouch) : "—"}</span>
                 <span className="next-action">{lead.nextAction}</span>
               </button>
             ))
@@ -158,18 +162,18 @@ export function LeadsClient({ initialLeads }: { initialLeads: LeadRow[] }) {
         </div>
         <div className="table-footer">
           <span>
-            {filtered.length} / {initialLeads.length} 件を表示
+            {t("common.showing", { filtered: filtered.length, total: initialLeads.length })}
           </span>
           <div>
-            <button disabled>前へ</button>
+            <button disabled>Prev</button>
             <b>1</b>
-            <button disabled>次へ</button>
+            <button disabled>Next</button>
           </div>
         </div>
       </Panel>
       {adding ? <AddLeadModal onClose={() => setAdding(false)} onAdd={handleAdd} pending={isPending} /> : null}
       {selected ? (
-        <Modal title="リード詳細" onClose={() => setSelected(null)}>
+        <Modal title={t("leads.detailTitle")} onClose={() => setSelected(null)}>
           <div className="modal-body lead-detail">
             <div className="detail-identity">
               <div className="identity-icon">
@@ -177,7 +181,7 @@ export function LeadsClient({ initialLeads }: { initialLeads: LeadRow[] }) {
               </div>
               <div>
                 <h3>{selected.company}</h3>
-                <p>{selected.person || "担当者未設定"}</p>
+                <p>{selected.person || t("leads.contact")}</p>
                 <a href={`mailto:${selected.email}`}>
                   <Mail size={13} />
                   {selected.email}
@@ -186,42 +190,42 @@ export function LeadsClient({ initialLeads }: { initialLeads: LeadRow[] }) {
             </div>
             <div className="detail-grid">
               <div>
-                <span>ステータス</span>
-                <LeadStatus status={selected.status} />
+                <span>{t("leads.status")}</span>
+                <LeadStatus dbStatus={selected.dbStatus} />
               </div>
               <div>
-                <span>タッチ回数</span>
+                <span>{t("leads.touchCount")}</span>
                 <strong>{selected.touches} 回</strong>
               </div>
               <div>
-                <span>最終接触</span>
-                <strong>{selected.lastTouch ? timeAgo(selected.lastTouch) : "未接触"}</strong>
+                <span>{t("leads.lastTouch")}</span>
+                <strong>{selected.lastTouch ? timeAgo(selected.lastTouch) : "—"}</strong>
               </div>
               <div>
-                <span>登録日</span>
-                <strong>{new Date(selected.createdAt).toLocaleDateString("ja-JP")}</strong>
+                <span>{t("leads.registeredOn")}</span>
+                <strong>{new Date(selected.createdAt).toLocaleDateString()}</strong>
               </div>
             </div>
             {selected.notes ? (
               <div className="timeline-mini">
-                <h4>メモ</h4>
+                <h4>{t("leads.notes")}</h4>
                 <p>{selected.notes}</p>
               </div>
             ) : null}
             <div className="timeline-mini">
-              <h4>最近の履歴</h4>
+              <h4>{t("leads.recentHistory")}</h4>
               <p>
                 <i />
-                {selected.lastTouch ? `${timeAgo(selected.lastTouch)} · ${selected.nextAction}` : "未接触 · 初回営業"}
+                {selected.lastTouch ? `${timeAgo(selected.lastTouch)} · ${selected.nextAction}` : "—"}
               </p>
             </div>
           </div>
           <div className="modal-actions">
             <button className="btn ghost" onClick={() => setSelected(null)}>
-              閉じる
+              {t("common.close")}
             </button>
-            <button className="btn primary" onClick={() => alert("タスク作成はタスクページから行えます")}>
-              タスクを作成
+            <button className="btn primary" onClick={() => alert(t("leads.createTask"))}>
+              {t("leads.createTask")}
             </button>
           </div>
         </Modal>
@@ -242,9 +246,11 @@ function Metric({ label, value, sub, tone }: { label: string; value: string; sub
     </div>
   );
 }
-function LeadStatus({ status }: { status: LeadRow["status"] }) {
-  const key = status === "アクティブ" ? "approved" : status === "返信あり" ? "claimed" : status === "抑制中" ? "rejected" : "archived";
-  return <span className={`status-pill ${key}`}>{status}</span>;
+function LeadStatus({ dbStatus }: { dbStatus: string }) {
+  const { t } = useI18n();
+  const key = dbStatus === "ACTIVE" ? "approved" : dbStatus === "RESPONDED" ? "claimed" : dbStatus === "SUPPRESSED" ? "rejected" : "archived";
+  const label = t(`status.lead.${dbStatus}`);
+  return <span className={`status-pill ${key}`}>{label}</span>;
 }
 function AddLeadModal({
   onClose,
@@ -255,31 +261,32 @@ function AddLeadModal({
   onAdd: (company: string, person: string, email: string) => void;
   pending: boolean;
 }) {
+  const { t } = useI18n();
   const [company, setCompany] = useState("");
   const [person, setPerson] = useState("");
   const [email, setEmail] = useState("");
   return (
-    <Modal title="リードを追加" onClose={onClose}>
+    <Modal title={t("leads.addModalTitle")} onClose={onClose}>
       <div className="modal-body form-grid">
         <label>
-          会社名
-          <input value={company} onChange={(e) => setCompany(e.target.value)} placeholder="株式会社Example" />
+          {t("leads.company")}
+          <input value={company} onChange={(e) => setCompany(e.target.value)} placeholder={t("leads.companyPlaceholder")} />
         </label>
         <label>
-          担当者
-          <input value={person} onChange={(e) => setPerson(e.target.value)} placeholder="山田 太郎" />
+          {t("leads.contact")}
+          <input value={person} onChange={(e) => setPerson(e.target.value)} placeholder={t("leads.contactPlaceholder")} />
         </label>
         <label className="full">
-          メールアドレス
-          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="sales@example.jp" type="email" />
+          {t("leads.email")}
+          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t("leads.emailPlaceholder")} type="email" />
         </label>
       </div>
       <div className="modal-actions">
         <button className="btn ghost" onClick={onClose} disabled={pending}>
-          キャンセル
+          {t("common.cancel")}
         </button>
         <button className="btn primary" disabled={!company || !email || pending} onClick={() => onAdd(company, person, email)}>
-          {pending ? "追加中..." : "追加する"}
+          {pending ? t("leads.adding") : t("leads.add")}
         </button>
       </div>
     </Modal>

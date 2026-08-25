@@ -1,11 +1,17 @@
-import { CalendarClock, CheckCircle2, CircleAlert, Clock3, FileCheck2, Gauge, Inbox, ListChecks, RefreshCw, Send, Users } from "lucide-react";
+import { CalendarClock, CheckCircle2, CircleAlert, Clock3, FileCheck2, Gauge, Inbox, ListChecks, Send, Users } from "lucide-react";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { getSettingInt } from "@/lib/settings";
 import { Panel, PanelHead, EmptyState } from "@/components/ui";
 import { DashboardApprovals } from "@/components/dashboard-client";
 import { DashboardFollowupButton } from "@/components/dashboard-followup";
-import { timeAgo } from "@/lib/serialize";
+import { Onboarding } from "@/components/onboarding";
+import { getLocale } from "@/i18n/locale";
+import { formatRelativeTime, formatNumber } from "@/i18n/format";
+import en from "../../messages/en.json";
+import ja from "../../messages/ja.json";
+import type { Locale } from "@/i18n/config";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +19,39 @@ function toJSTDate(d: Date) {
   return d;
 }
 
+const dictionaries: Record<Locale, Record<string, unknown>> = {
+  en: en as Record<string, unknown>,
+  ja: ja as Record<string, unknown>,
+};
+
+function getByPath(obj: Record<string, unknown>, path: string): string | undefined {
+  const parts = path.split(".");
+  let cur: unknown = obj;
+  for (const p of parts) {
+    if (cur && typeof cur === "object" && p in (cur as Record<string, unknown>)) {
+      cur = (cur as Record<string, unknown>)[p];
+    } else return undefined;
+  }
+  return typeof cur === "string" ? cur : undefined;
+}
+
+function createTranslator(locale: Locale) {
+  return (key: string, params?: Record<string, string | number>) => {
+    const dict = dictionaries[locale] ?? dictionaries.en;
+    let str = getByPath(dict, key) ?? getByPath(dictionaries.en, key) ?? key;
+    if (params) {
+      for (const [k, v] of Object.entries(params)) {
+        str = str.replace(new RegExp(`\\{${k}\\}`, "g"), String(v));
+      }
+    }
+    return str;
+  };
+}
+
 export default async function DashboardPage() {
+  const locale = await getLocale();
+  const t = createTranslator(locale);
+
   const now = new Date();
   const startOfDay = new Date(now);
   startOfDay.setHours(0, 0, 0, 0);
@@ -103,27 +141,32 @@ export default async function DashboardPage() {
       }
       return "低リスク";
     })() as "低リスク" | "中リスク" | "高リスク",
-    time: timeAgo(a.createdAt.toISOString()),
+    time: formatRelativeTime(a.createdAt.toISOString(), locale),
     status: "承認待ち" as const,
   }));
 
   // Recent activity derived from real data
   const activities: Array<{ tone: string; title: string; body: string; time: string }> = [];
   for (const a of recentApprovals) {
-    const label = a.status === "APPROVED" || a.status === "EDITED" ? "承認されました" : a.status === "REJECTED" ? "却下されました" : "新しい下書きが提出されました";
+    const label =
+      a.status === "APPROVED" || a.status === "EDITED"
+        ? t("dashboard.approved")
+        : a.status === "REJECTED"
+          ? t("status.approval.REJECTED")
+          : t("dashboard.newDraft");
     activities.push({
       tone: a.status === "REJECTED" ? "amber" : a.status === "APPROVED" || a.status === "EDITED" ? "green" : "blue",
       title: label,
       body: `[${a.lead?.company ?? "—"}] ${a.subject.slice(0, 40)}`,
-      time: timeAgo(a.createdAt.toISOString()),
+      time: formatRelativeTime(a.createdAt.toISOString(), locale),
     });
   }
   for (const l of recentLogs) {
     activities.push({
       tone: l.status === "SENT" ? "green" : "amber",
-      title: l.status === "SENT" ? "メール送信完了" : "送信失敗",
-      body: `[${l.lead?.company ?? l.subject.slice(0, 20)}] への送信`,
-      time: timeAgo(l.sentAt.toISOString()),
+      title: l.status === "SENT" ? t("dashboard.emailSent") : t("history.failed"),
+      body: `[${l.lead?.company ?? l.subject.slice(0, 20)}] ${l.status === "SENT" ? t("dashboard.emailSent") : t("history.failed")}`,
+      time: formatRelativeTime(l.sentAt.toISOString(), locale),
     });
   }
   activities.sort((a, b) => 0); // keeps recentApprovals order; ideally sort by time but timeAgo is string
@@ -134,45 +177,93 @@ export default async function DashboardPage() {
     alerts.push({
       tone: "red",
       icon: <CircleAlert size={17} />,
-      title: "本文不一致を検知",
-      body: `${hashMismatches} 件の送信でハッシュ不一致が検知されています`,
-      time: "監査ログを確認",
+      title: t("history.hashMismatch"),
+      body: `${formatNumber(hashMismatches, locale)} ${t("history.hashMismatch")} ${locale === "ja" ? "が検知されています" : "detected"}`,
+      time: t("history.title"),
     });
   }
   if (suppressedCount > 0) {
     alerts.push({
       tone: "amber",
       icon: <CircleAlert size={17} />,
-      title: "抑制リスト登録あり",
-      body: `${suppressedCount} 件が抑制リストに登録されています`,
-      time: "抑制リストを確認",
+      title: t("dashboard.suppressionMatch"),
+      body: `${formatNumber(suppressedCount, locale)} ${locale === "ja" ? "件が抑制リストに登録されています" : "leads on suppression list"}`,
+      time: t("suppression.title"),
     });
   }
   if (nearLimit) {
     alerts.push({
       tone: "blue",
       icon: <Gauge size={17} />,
-      title: "日次上限に近づいています",
-      body: `今日の送信数が上限の ${progress}% に達しています`,
-      time: "今すぐ確認",
+      title: t("dashboard.dailyLimitNear"),
+      body: `${t("dashboard.dailyLimit")} ${progress}%`,
+      time: t("common.retry"),
     });
   }
   if (alerts.length === 0) {
     alerts.push({
       tone: "blue",
       icon: <Gauge size={17} />,
-      title: "アラートはありません",
-      body: "現在、重大なリスクは検知されていません",
+      title: t("dashboard.noAlerts"),
+      body: t("dashboard.noAlertsDesc"),
       time: "",
     });
   }
 
   const stats = [
-    { label: "承認待ち", value: String(pendingCount), unit: "件", sub: "要対応", delta: "", icon: CalendarClock, tone: "violet" },
-    { label: "今日の送信数", value: String(todaySends), suffix: ` / ${dailyLimit}`, sub: "日次上限", progress, icon: Send, tone: "green" },
-    { label: "未返信タスク", value: String(pendingTasks), unit: "件", sub: "進行中", delta: "", icon: Clock3, tone: "orange" },
-    { label: "全リード数", value: String(totalLeads), unit: "件", sub: `アクティブ ${activeLeads} 件`, icon: Users, tone: "blue" },
+    { label: t("dashboard.pendingApprovals"), value: formatNumber(pendingCount, locale), unit: "", sub: t("dashboard.needsAttention"), delta: "", icon: CalendarClock, tone: "violet" },
+    { label: t("dashboard.todaysSends"), value: formatNumber(todaySends, locale), suffix: ` / ${formatNumber(dailyLimit, locale)}`, sub: t("dashboard.dailyLimit"), progress, icon: Send, tone: "green" },
+    { label: t("dashboard.pendingTasks"), value: formatNumber(pendingTasks, locale), unit: "", sub: t("tasks.inProgress"), delta: "", icon: Clock3, tone: "orange" },
+    { label: t("dashboard.totalLeads"), value: formatNumber(totalLeads, locale), unit: "", sub: t("dashboard.activeLeads", { count: formatNumber(activeLeads, locale) }), icon: Users, tone: "blue" },
   ];
+
+  const isFirstRun = pendingCount === 0 && totalLeads === 0 && tasksAll.length === 0 && recentLogs.length === 0 && recentApprovals.length === 0;
+  let mcpEndpoint = "/mcp";
+  try {
+    const h = await headers();
+    const host = h.get("host");
+    const proto = h.get("x-forwarded-proto") ?? "http";
+    if (host) mcpEndpoint = `${proto}://${host}/mcp`;
+  } catch {}
+
+  if (isFirstRun) {
+    return (
+      <div className="dashboard-page">
+        <Onboarding mcpEndpoint={mcpEndpoint} />
+        <section className="stats-grid">
+          {stats.map(({ label, value, unit, suffix, sub, delta, progress: prog, icon: Icon, tone }) => (
+            <article className="stat-card" key={label}>
+              <div className={`stat-icon ${tone}`}>
+                <Icon size={26} strokeWidth={1.8} />
+              </div>
+              <div className="stat-copy">
+                <span className="stat-label">{label}</span>
+                <div className="stat-number">
+                  <strong>{value}</strong>
+                  {suffix ? <b>{suffix}</b> : null}
+                  {unit ? <small>{unit}</small> : null}
+                </div>
+                {prog !== undefined ? (
+                  <div className="progress-row">
+                    <span>{sub}</span>
+                    <div className="progress">
+                      <i style={{ width: `${Math.min(100, prog)}%` }} />
+                    </div>
+                    <span>{prog}%</span>
+                  </div>
+                ) : (
+                  <div className="stat-sub">
+                    {sub}
+                    {delta ? <b>{delta}</b> : null}
+                  </div>
+                )}
+              </div>
+            </article>
+          ))}
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard-page">
@@ -211,24 +302,24 @@ export default async function DashboardPage() {
       <section className="content-grid">
         <div className="left-stack">
           <Panel className="approvals-panel">
-            <PanelHead title="承認キュー" meta={`（最新 ${Math.min(5, pendingCount)} 件）`} action={<Link href="/approvals" className="text-link">すべて表示</Link>} />
+            <PanelHead title={t("dashboard.approvalQueue")} meta={t("dashboard.latest", { count: Math.min(5, pendingCount) })} action={<Link href="/approvals" className="text-link">{t("dashboard.viewAll")}</Link>} />
             <DashboardApprovals items={pendingApprovals} />
           </Panel>
 
           <div className="bottom-grid">
             <Panel className="chart-panel">
               <PanelHead
-                title="送信数の推移"
-                meta="（過去 7 日間）"
+                title={t("dashboard.sendTrend")}
+                meta={t("dashboard.last7Days")}
                 action={
                   <div className="legend">
                     <span>
                       <i className="legend-bar" />
-                      送信数
+                      {t("dashboard.sends")}
                     </span>
                     <span>
                       <i className="legend-line" />
-                      上限
+                      {t("dashboard.limit")}
                     </span>
                   </div>
                 }
@@ -253,7 +344,7 @@ export default async function DashboardPage() {
               </div>
             </Panel>
             <Panel className="alerts-panel">
-              <PanelHead title="リスクアラート" />
+              <PanelHead title={t("dashboard.riskAlerts")} />
               {alerts.map((a, i) => (
                 <div className="alert-row" key={i}>
                   <div className={`alert-icon ${a.tone}`}>{a.icon}</div>
@@ -270,45 +361,45 @@ export default async function DashboardPage() {
 
         <div className="right-stack">
           <Panel className="task-panel">
-            <PanelHead title="タスクサマリー" action={<Link href="/tasks" className="text-link">すべて表示</Link>} />
+            <PanelHead title={t("dashboard.taskSummary")} action={<Link href="/tasks" className="text-link">{t("dashboard.viewAll")}</Link>} />
             <div className="task-row">
               <div className="task-icon red">
                 <FileCheck2 size={17} />
               </div>
-              <strong>期限超過</strong>
+              <strong>{t("dashboard.overdue")}</strong>
               <b className="red">
-                {overdue}
-                <small>件</small>
+                {formatNumber(overdue, locale)}
+                <small>{locale === "ja" ? "件" : ""}</small>
               </b>
             </div>
             <div className="task-row">
               <div className="task-icon amber">
                 <CalendarClock size={17} />
               </div>
-              <strong>今日が期限</strong>
+              <strong>{t("dashboard.dueToday")}</strong>
               <b className="amber">
-                {todayDue}
-                <small>件</small>
+                {formatNumber(todayDue, locale)}
+                <small>{locale === "ja" ? "件" : ""}</small>
               </b>
             </div>
             <div className="task-row">
               <div className="task-icon blue">
                 <ListChecks size={17} />
               </div>
-              <strong>今週中</strong>
+              <strong>{t("dashboard.dueThisWeek")}</strong>
               <b className="blue">
-                {weekDue}
-                <small>件</small>
+                {formatNumber(weekDue, locale)}
+                <small>{locale === "ja" ? "件" : ""}</small>
               </b>
             </div>
             <div className="task-row">
               <div className="task-icon green">
                 <CheckCircle2 size={17} />
               </div>
-              <strong>完了</strong>
+              <strong>{t("dashboard.done")}</strong>
               <b className="green">
-                {done}
-                <small>件</small>
+                {formatNumber(done, locale)}
+                <small>{locale === "ja" ? "件" : ""}</small>
               </b>
             </div>
             <div className="unreplied">
@@ -316,20 +407,20 @@ export default async function DashboardPage() {
                 <Inbox size={17} />
               </div>
               <div>
-                <strong>未返信リード</strong>
-                <span>3日以上返信がないリード</span>
+                <strong>{t("dashboard.unrepliedLeads")}</strong>
+                <span>{t("dashboard.unrepliedDesc")}</span>
               </div>
               <b>
-                {pendingTasks}
-                <small>件</small>
+                {formatNumber(pendingTasks, locale)}
+                <small>{locale === "ja" ? "件" : ""}</small>
               </b>
             </div>
             <DashboardFollowupButton />
           </Panel>
           <Panel className="activity-panel">
-            <PanelHead title="最近のアクティビティ" />
+            <PanelHead title={t("dashboard.recentActivity")} />
             {activities.length === 0 ? (
-              <EmptyState icon={<CheckCircle2 size={30} />} title="アクティビティはありません" text="承認や送信が発生するとここに表示されます。" />
+              <EmptyState icon={<CheckCircle2 size={30} />} title={t("dashboard.noActivity")} text={t("dashboard.noActivityDesc")} />
             ) : (
               activities
                 .slice(0, 4)
@@ -347,7 +438,7 @@ export default async function DashboardPage() {
                 ))
             )}
             <Link href="/history" className="activity-link" style={{ display: "grid", placeItems: "center", textDecoration: "none" }}>
-              すべてのアクティビティを表示 →
+              {t("dashboard.viewAllActivity")}
             </Link>
           </Panel>
         </div>

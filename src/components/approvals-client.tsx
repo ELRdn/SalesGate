@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AgentChip, EmptyState, Modal, PageHeader, Panel, RiskChip } from "@/components/ui";
 import { approveApprovalItem, editAndApproveApprovalItem, rejectApprovalItem, retryFailedApprovalItem } from "@/lib/actions";
 import { timeAgo } from "@/lib/serialize";
+import { useI18n } from "@/i18n/provider";
 
 type ApprovalItem = {
   id: string;
@@ -31,9 +32,18 @@ type ApprovalItem = {
   messageId: string | null;
 };
 
-const filters: Array<"全件" | ApprovalItem["status"]> = ["承認待ち", "承認済み", "編集承認済み", "送信失敗", "却下", "送信済み", "全件"];
+const filterDefs: Array<{ value: "全件" | ApprovalItem["status"]; key: string }> = [
+  { value: "承認待ち", key: "awaiting" },
+  { value: "承認済み", key: "approved" },
+  { value: "編集承認済み", key: "edited" },
+  { value: "送信失敗", key: "failed" },
+  { value: "却下", key: "rejected" },
+  { value: "送信済み", key: "sent" },
+  { value: "全件", key: "all" },
+];
 
 export function ApprovalsClient({ initialItems }: { initialItems: ApprovalItem[] }) {
+  const { t } = useI18n();
   const [filter, setFilter] = useState<"全件" | ApprovalItem["status"]>("承認待ち");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(initialItems.find((a) => a.status === "承認待ち")?.id ?? initialItems[0]?.id ?? null);
@@ -55,7 +65,7 @@ export function ApprovalsClient({ initialItems }: { initialItems: ApprovalItem[]
         await approveApprovalItem(item.id);
         router.refresh();
       } catch (e) {
-        alert(e instanceof Error ? e.message : "承認に失敗しました");
+        alert(e instanceof Error ? e.message : t("approvals.approveError"));
       }
     });
   };
@@ -66,7 +76,7 @@ export function ApprovalsClient({ initialItems }: { initialItems: ApprovalItem[]
         await retryFailedApprovalItem(item.id);
         router.refresh();
       } catch (e) {
-        alert(e instanceof Error ? e.message : "再送信許可に失敗しました");
+        alert(e instanceof Error ? e.message : t("approvals.approveError"));
       }
     });
   };
@@ -74,45 +84,45 @@ export function ApprovalsClient({ initialItems }: { initialItems: ApprovalItem[]
   return (
     <div className="workspace-page approvals-page">
       <PageHeader
-        title="承認キュー"
-        description="AIエージェントが提出した外部送信を、人間が最終判断します。"
+        title={t("approvals.title")}
+        description={t("approvals.description")}
         action={
           <div className="queue-kpi">
-            <span>承認待ち</span>
+            <span>{t("approvals.pending")}</span>
             <strong>{pendingCount}</strong>
           </div>
         }
       />
       <div className="filter-toolbar">
         <div className="filter-tabs">
-          {filters.map((item) => (
-            <button key={item} className={filter === item ? "active" : ""} onClick={() => setFilter(item)}>
-              {item}
-              {item === "承認待ち" ? <b>{pendingCount}</b> : null}
+          {filterDefs.map((item) => (
+            <button key={item.value} className={filter === item.value ? "active" : ""} onClick={() => setFilter(item.value)}>
+              {t(`approvals.filters.${item.key}`)}
+              {item.key === "awaiting" ? <b>{pendingCount}</b> : null}
             </button>
           ))}
         </div>
         <label className="search-box">
           <Search size={15} />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="企業・担当者・件名を検索" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("approvals.searchPlaceholder")} />
         </label>
       </div>
 
       <div className="master-detail">
         <Panel className="queue-list-panel">
           <div className="queue-list-head">
-            <span>{rows.length} 件</span>
-            <small>新しい順</small>
+            <span>{t("approvals.count", { count: rows.length })}</span>
+            <small>{t("approvals.newestFirst")}</small>
           </div>
           <div className="queue-list">
             {rows.length === 0 ? (
-              <EmptyState icon={<CheckCircle2 size={30} />} title="該当する承認はありません" text="フィルタまたは検索条件を変更してください。" />
+              <EmptyState icon={<CheckCircle2 size={30} />} title={t("approvals.noMatching")} text={t("approvals.noMatchingDesc")} />
             ) : (
               rows.map((item) => (
                 <button key={item.id} className={`queue-item ${selectedId === item.id ? "selected" : ""}`} onClick={() => setSelectedId(item.id)}>
                   <div className="queue-item-top">
                     <strong>{item.company}</strong>
-                    <StatusPill status={item.status} />
+                    <StatusPill dbStatus={item.dbStatus} />
                   </div>
                   <span>{item.subject}</span>
                   <small>
@@ -130,7 +140,7 @@ export function ApprovalsClient({ initialItems }: { initialItems: ApprovalItem[]
 
         <Panel className="approval-detail-panel">
           {!selected ? (
-            <EmptyState icon={<FileSearch size={30} />} title="承認を選択してください" text="左側のキューからレビュー対象を選びます。" />
+            <EmptyState icon={<FileSearch size={30} />} title={t("approvals.selectPrompt")} text={t("approvals.selectDesc")} />
           ) : (
             <>
               <div className="approval-detail-head">
@@ -142,7 +152,7 @@ export function ApprovalsClient({ initialItems }: { initialItems: ApprovalItem[]
                   </p>
                 </div>
                 <div className="detail-meta">
-                  <StatusPill status={selected.status} />
+                  <StatusPill dbStatus={selected.dbStatus} />
                   <AgentChip agent={selected.agent as "DSH" | "OpenClaw" | "Claude Code" | "Codex"} />
                 </div>
               </div>
@@ -150,75 +160,75 @@ export function ApprovalsClient({ initialItems }: { initialItems: ApprovalItem[]
                 <div className="detail-box risk-box">
                   <div className="detail-label">
                     <ShieldAlert size={15} />
-                    リスク評価
+                    {t("approvals.risk")}
                   </div>
                   <div className="risk-box-content">
                     <RiskChip risk={selected.risk} />
-                    <span>{selected.feedback ?? selected.note ?? (selected.riskFlags.length ? selected.riskFlags.join(", ") : "リスクフラグなし")}</span>
+                    <span>{selected.feedback ?? selected.note ?? (selected.riskFlags.length ? selected.riskFlags.join(", ") : t("approvals.noRiskFlags"))}</span>
                   </div>
                 </div>
                 <div className="detail-box evidence-box">
                   <div className="detail-label">
                     <FileSearch size={15} />
-                    根拠
+                    {t("approvals.evidence")}
                   </div>
-                  <p>{selected.evidence || "根拠は提出されていません"}</p>
+                  <p>{selected.evidence || t("approvals.noEvidence")}</p>
                 </div>
               </div>
               <div className="mail-preview">
                 <div className="mail-field">
-                  <span>件名</span>
+                  <span>{t("approvals.subject")}</span>
                   <strong>{selected.subject}</strong>
                 </div>
                 <div className="mail-body">{selected.body}</div>
               </div>
               <div className="hash-strip">
                 <LockKeyhole size={14} />
-                <span>承認時に本文 SHA-256 をロック</span>
+                <span>{t("approvals.hashLocked")}</span>
                 {selected.lockedHash ? (
                   <>
                     <code>
                       {selected.lockedHash.slice(0, 6)}...{selected.lockedHash.slice(-4)}
                     </code>
-                    {selected.hashMismatchAt ? <b style={{ color: "#ff6b73" }}>不一致</b> : <b>一致</b>}
+                    {selected.hashMismatchAt ? <b style={{ color: "#ff6b73" }}>{t("approvals.hashMismatch")}</b> : <b>{t("approvals.hashMatch")}</b>}
                   </>
                 ) : (
                   <>
                     <code>—</code>
-                    <b>未ロック</b>
+                    <b>{t("approvals.hashNotLocked")}</b>
                   </>
                 )}
               </div>
-              {selected.hashMismatchAt ? <div className="hash-mismatch-warning">⚠ ハッシュ不一致が検知されました（{timeAgo(selected.hashMismatchAt)}）</div> : null}
+              {selected.hashMismatchAt ? <div className="hash-mismatch-warning">{t("approvals.hashMismatchWarning", { time: timeAgo(selected.hashMismatchAt) })}</div> : null}
               <div className="decision-footer">
                 <div>
-                  <small>提出元</small>
+                  <small>{t("approvals.submittedBy")}</small>
                   <strong>
                     {selected.agent} · {timeAgo(selected.time)}
-                    {selected.claimedBy ? ` · claim: ${selected.claimedBy}` : ""}
+                    {selected.claimedBy ? ` · ${t("approvals.claimedBy")}: ${selected.claimedBy}` : ""}
                   </strong>
                 </div>
                 {selected.status === "承認待ち" ? (
                   <div className="decision-buttons">
                     <button className="btn secondary" onClick={() => setMode("edit")} disabled={isPending}>
-                      編集して承認
+                      {t("approvals.editAndApprove")}
                     </button>
                     <button className="btn ghost-danger" onClick={() => setMode("reject")} disabled={isPending}>
-                      却下
+                      {t("approvals.reject")}
                     </button>
                     <button className="btn primary" onClick={() => handleApprove(selected)} disabled={isPending}>
                       <Check size={15} />
-                      承認
+                      {t("approvals.approve")}
                     </button>
                   </div>
                 ) : selected.status === "送信失敗" ? (
                   <button className="btn warning" onClick={() => handleRetry(selected)} disabled={isPending}>
-                    再送信を許可
+                    {t("approvals.retry")}
                   </button>
                 ) : (
                   <div className="decision-done">
                     <CheckCircle2 size={17} />
-                    このアイテムは処理済みです ({selected.status}
+                    {t("approvals.processed")} ({t(`status.approval.${selected.dbStatus}`)}
                     {selected.messageId ? ` · ${selected.messageId}` : ""})
                   </div>
                 )}
@@ -243,22 +253,20 @@ export function ApprovalsClient({ initialItems }: { initialItems: ApprovalItem[]
   );
 }
 
-function StatusPill({ status }: { status: ApprovalItem["status"] }) {
-  const key =
-    status === "承認待ち"
-      ? "awaiting"
-      : status === "承認済み"
-        ? "approved"
-        : status === "編集承認済み"
-          ? "edited"
-          : status === "却下"
-            ? "rejected"
-            : status === "送信失敗"
-              ? "failed"
-              : status === "送信中"
-                ? "claimed"
-                : "sent";
-  return <span className={`status-pill ${key}`}>{status}</span>;
+function StatusPill({ dbStatus }: { dbStatus: string }) {
+  const { t } = useI18n();
+  const keyMap: Record<string, string> = {
+    AWAITING_APPROVAL: "awaiting",
+    APPROVED: "approved",
+    EDITED: "edited",
+    REJECTED: "rejected",
+    FAILED: "failed",
+    CLAIMED: "claimed",
+    SENT: "sent",
+    ARCHIVED: "archived",
+  };
+  const key = keyMap[dbStatus] ?? "awaiting";
+  return <span className={`status-pill ${key}`}>{t(`status.approval.${dbStatus}`)}</span>;
 }
 
 function ApprovalModal({
@@ -272,6 +280,7 @@ function ApprovalModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const { t } = useI18n();
   const [subject, setSubject] = useState(item.subject);
   const [body, setBody] = useState(item.rawBody);
   const [reason, setReason] = useState("");
@@ -282,7 +291,7 @@ function ApprovalModal({
       try {
         if (mode === "edit") {
           if (!subject.trim() || !body.trim()) {
-            alert("件名と本文は必須です");
+            alert(t("errors.required"));
             return;
           }
           await editAndApproveApprovalItem(item.id, subject, body);
@@ -291,37 +300,37 @@ function ApprovalModal({
         }
         onSuccess();
       } catch (e) {
-        alert(e instanceof Error ? e.message : "操作に失敗しました");
+        alert(e instanceof Error ? e.message : t("errors.generic"));
       }
     });
   };
 
   return (
-    <Modal title={mode === "edit" ? "編集して承認" : "承認を却下"} onClose={onClose} width="720px">
+    <Modal title={mode === "edit" ? t("approvals.editModalTitle") : t("approvals.rejectModalTitle")} onClose={onClose} width="720px">
       <div className="modal-body form-stack">
         {mode === "edit" ? (
           <>
             <label>
-              件名
+              {t("approvals.subject")}
               <input value={subject} onChange={(e) => setSubject(e.target.value)} />
             </label>
             <label>
-              本文
+              {t("approvals.mailPreview")}
               <textarea rows={11} value={body} onChange={(e) => setBody(e.target.value)} />
             </label>
-            <div className="modal-info">保存と同時に新しい本文ハッシュを生成し、編集承認済みに変更します。</div>
+            <div className="modal-info">{t("approvals.editInfo")}</div>
           </>
         ) : (
           <>
             <div className="reject-warning">
               <ShieldAlert size={18} />
               <span>
-                <strong>{item.company}</strong> の下書きを却下します。エージェントはこの結果を次の判断に利用できます。
+                <strong>{item.company}</strong> {t("approvals.rejectWarning")}
               </span>
             </div>
             <label>
-              フィードバック（任意）
-              <textarea rows={5} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="例: 根拠のない実績表現を削除して再提出してください" />
+              {t("approvals.feedbackLabel")}
+              <textarea rows={5} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("approvals.feedbackPlaceholder")} />
             </label>
           </>
         )}
@@ -329,10 +338,10 @@ function ApprovalModal({
       <div className="modal-actions">
         <button className="btn ghost" onClick={onClose} disabled={isPending}>
           <X size={15} />
-          キャンセル
+          {t("common.cancel")}
         </button>
         <button className={mode === "edit" ? "btn primary" : "btn destructive"} onClick={handleSave} disabled={isPending}>
-          {isPending ? "処理中..." : mode === "edit" ? "編集して承認" : "却下する"}
+          {isPending ? t("common.saving") : mode === "edit" ? t("approvals.editAndApprove") : t("approvals.reject")}
         </button>
       </div>
     </Modal>

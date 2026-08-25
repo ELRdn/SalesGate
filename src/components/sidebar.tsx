@@ -3,17 +3,7 @@
 import { BookOpen, ClipboardCheck, History, House, ListChecks, Plus, Settings, ShieldBan, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-
-const navItems = [
-  { label: "ダッシュボード", href: "/", icon: House, badge: false },
-  { label: "承認キュー", href: "/approvals", icon: ClipboardCheck, badge: true },
-  { label: "リード", href: "/leads", icon: Users, badge: false },
-  { label: "タスク", href: "/tasks", icon: ListChecks, badge: false },
-  { label: "送信履歴", href: "/history", icon: History, badge: false },
-  { label: "抑制リスト", href: "/suppression", icon: ShieldBan, badge: false },
-  { label: "プレイブック", href: "/playbooks", icon: BookOpen, badge: false },
-  { label: "設定", href: "/settings", icon: Settings, badge: false },
-] as const;
+import { useI18n } from "@/i18n/provider";
 
 const AGENT_COLORS: Record<string, string> = {
   DSH: "#42c976",
@@ -42,7 +32,19 @@ export function Sidebar({
   agents: string[];
 }) {
   const pathname = usePathname();
+  const { t } = useI18n();
   const displayAgents = agents.length > 0 ? agents : ["DSH", "OpenClaw", "Claude Code", "Codex"];
+
+  const navItems = [
+    { key: "navigation.dashboard", href: "/", icon: House, badge: false },
+    { key: "navigation.approvals", href: "/approvals", icon: ClipboardCheck, badge: true },
+    { key: "navigation.leads", href: "/leads", icon: Users, badge: false },
+    { key: "navigation.tasks", href: "/tasks", icon: ListChecks, badge: false },
+    { key: "navigation.history", href: "/history", icon: History, badge: false },
+    { key: "navigation.suppression", href: "/suppression", icon: ShieldBan, badge: false },
+    { key: "navigation.playbooks", href: "/playbooks", icon: BookOpen, badge: false },
+    { key: "navigation.settings", href: "/settings", icon: Settings, badge: false },
+  ] as const;
 
   return (
     <aside className="sidebar">
@@ -58,12 +60,13 @@ export function Sidebar({
         </div>
       </div>
 
-      <nav className="side-nav" aria-label="メインナビゲーション">
-        {navItems.map(({ label, href, icon: Icon, badge }) => {
+      <nav className="side-nav" aria-label={t("navigation.dashboard")}>
+        {navItems.map(({ key, href, icon: Icon, badge }) => {
+          const label = t(key);
           const isActive = href === "/" ? pathname === "/" : pathname.startsWith(href);
           return (
             <Link
-              key={label}
+              key={key}
               href={href}
               className={isActive ? "nav-item active" : "nav-item"}
               title={collapsed ? label : undefined}
@@ -78,8 +81,8 @@ export function Sidebar({
 
       <div className="agent-section">
         <div className="section-label">
-          <span>エージェント</span>
-          <button aria-label="エージェント追加">
+          <span>{t("sidebar.agents")}</span>
+          <button aria-label={t("sidebar.addAgent")}>
             <Plus size={16} />
           </button>
         </div>
@@ -94,7 +97,7 @@ export function Sidebar({
       <div className="server-card">
         <span>SalesGate v{version}</span>
         <div>
-          <i /> MCP Server: <b>Connected</b>
+          <i /> {t("sidebar.server")}: <b>{t("sidebar.connected")}</b>
         </div>
       </div>
     </aside>

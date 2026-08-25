@@ -33,7 +33,7 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const { t } = useI18n();
-  const displayAgents = agents.length > 0 ? agents : ["DSH", "OpenClaw", "Claude Code", "Codex"];
+  const hasAgents = agents.length > 0;
 
   const navItems = [
     { key: "navigation.dashboard", href: "/", icon: House, badge: false },
@@ -86,12 +86,19 @@ export function Sidebar({
             <Plus size={16} />
           </button>
         </div>
-        {displayAgents.map((name) => (
-          <div className="agent-line" key={name}>
-            <i style={{ background: colorFor(name) }} />
-            <span>{name}</span>
+        {hasAgents ? (
+          agents.map((name) => (
+            <div className="agent-line" key={name}>
+              <i style={{ background: colorFor(name) }} aria-hidden="true" />
+              <span>{name}</span>
+            </div>
+          ))
+        ) : (
+          <div className="agent-empty" role="status" aria-live="polite">
+            <span className="agent-empty-title">{t("sidebar.noAgents")}</span>
+            <span className="agent-empty-desc">{t("sidebar.noAgentsDesc")}</span>
           </div>
-        ))}
+        )}
       </div>
 
       <div className="server-card">

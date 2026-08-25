@@ -58,7 +58,7 @@ export default async function DashboardPage() {
 
   const dailyLimit = await getSettingInt("daily_send_limit", 50).catch(() => 50);
 
-  const [pendingCount, todaySends, totalLeads, activeLeads, tasksAll, recentApprovals, recentLogs, pendingApprovalsRaw, suppressedCount, hashMismatches] =
+  const [pendingCount, todaySends, totalLeads, activeLeads, tasksAll, recentApprovals, recentLogs, pendingApprovalsRaw, suppressedCount, hashMismatches, totalApprovals, reviewedCount] =
     await Promise.all([
       prisma.approvalItem.count({ where: { status: "AWAITING_APPROVAL" } }),
       prisma.messageLog.count({ where: { sentAt: { gte: startOfDay }, status: "SENT" } }),
@@ -75,6 +75,8 @@ export default async function DashboardPage() {
       }),
       prisma.lead.count({ where: { status: "SUPPRESSED" } }),
       prisma.approvalItem.count({ where: { hashMismatchAt: { not: null } } }),
+      prisma.approvalItem.count(),
+      prisma.approvalItem.count({ where: { status: { in: ["APPROVED", "EDITED", "REJECTED", "SENT", "CLAIMED", "FAILED"] } } }),
     ]);
 
   // Task summaries
@@ -226,10 +228,19 @@ export default async function DashboardPage() {
     if (host) mcpEndpoint = `${proto}://${host}/mcp`;
   } catch {}
 
+  // Onboarding progress derived from real state (no fake hardcode)
+  const hasPassword = !!process.env.SALESGATE_PASSWORD;
+  const onboardingState = {
+    secure: hasPassword,
+    connected: totalApprovals > 0,
+    submitted: totalApprovals > 0,
+    reviewed: reviewedCount > 0,
+  };
+
   if (isFirstRun) {
     return (
       <div className="dashboard-page">
-        <Onboarding mcpEndpoint={mcpEndpoint} />
+        <Onboarding mcpEndpoint={mcpEndpoint} state={onboardingState} />
         <section className="stats-grid">
           {stats.map(({ label, value, unit, suffix, sub, delta, progress: prog, icon: Icon, tone }) => (
             <article className="stat-card" key={label}>

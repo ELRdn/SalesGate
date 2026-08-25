@@ -15,7 +15,9 @@
     "addAgent": "Add agent",
     "server": "MCP Server",
     "connected": "Connected",
-    "collapse": "Collapse sidebar"
+    "collapse": "Collapse sidebar",
+    "noAgents": "No agents yet",
+    "noAgentsDesc": "Connected agents will appear here"
   },
   "topbar": {
     "allSystems": "All systems operational",
@@ -466,7 +468,7 @@
     "step1Title": "Secure this instance",
     "step1Desc": "Set SALESGATE_PASSWORD in Settings → Security.",
     "step2Title": "Connect an AI agent",
-    "step2Desc": "Copy the MCP endpoint and connect DSH / OpenClaw / Claude Code.",
+    "step2Desc": "Copy the MCP endpoint and add SalesGate to your agent.",
     "step3Title": "Submit your first draft",
     "step3Desc": "Have your agent call submit_draft. It will appear in the Approval Queue.",
     "step4Title": "Review in Approval Queue",
@@ -475,8 +477,25 @@
     "openGuide": "Open setup guide",
     "goSettings": "Go to Settings",
     "openQueue": "Open Approval Queue",
+    "openSecuritySettings": "Open Security Settings",
     "emptyTitle": "No data yet",
-    "emptyDesc": "Get started by connecting an agent."
+    "emptyDesc": "Get started by connecting an agent.",
+    "setupProgress": "Setup progress",
+    "currentStep": "Current step",
+    "mcpEndpoint": "MCP endpoint",
+    "suggestedIntegrations": "Suggested integrations",
+    "verified": "Verified",
+    "example": "Example",
+    "secureShort": "Secure",
+    "connectShort": "Connect",
+    "submitShort": "Submit",
+    "reviewShort": "Review",
+    "dismiss": "Dismiss for now",
+    "secureDetail": "Set a password to protect this instance.",
+    "connectDetail": "Copy your MCP endpoint and add SalesGate to your agent.",
+    "submitDetail": "Have your agent call submit_draft to create the first approval.",
+    "reviewDetail": "Review drafts in the Approval Queue to approve or reject.",
+    "available": "Available"
   },
   "about": {
     "title": "About",

@@ -1,12 +1,17 @@
 # SalesGate 🚦
 
-**Approval-first AI SDR Hub** — 何も勝手に送らない。営業はAIに、判断はあなたに。
+**The human approval and execution control layer for AI sales agents.**
 
-SalesGate は、AIエージェント（ハーネス）に営業活動を任せ、**外部への送信はすべて人間が承認してから**実行する、営業オペレーションハブです。
+SalesGate は、AI営業エージェントと実際の外部アクションの間に入り、人間承認を経たものだけが実行されることを保証する営業オペレーションハブです。
+
+```
+Agent drafts → SalesGate → Human approves → Locks approved payload → Agent claims (one winner) → Executes → Audited
+```
 
 - AIエージェントがリサーチ・下書き生成を行う
 - 人間が承認キューでレビュー（**承認 / 却下 / 編集**）
 - **承認されたアイテムだけが送信される**（送信はエージェント側の Gmail MCP 経由）
+- 宛先・件名・本文を含む canonical payload の整合性をSHA-256で保証（SG-INV-003）
 
 ## なぜ「承認ファースト」か
 
@@ -107,6 +112,8 @@ SalesGate はその逆張りです。**承認ゲートがあるからこそ、AI
 - **Node.js 26 以上**（スクリプト実行に Node.js ネイティブの型ストリッピング（TypeScript 型の実行時除去）を利用。`import` 文には `.ts` 拡張子が必要）
 - **pnpm 10 以上**
 
+> **Security Warning**: `SALESGATE_PASSWORD` のデフォルトBasic認証は **local / trusted-network / self-host basic protection** 用です。Do not expose the default SalesGate configuration directly to the public internet. 公開する場合はリバースプロキシ(TLS/rate limiting) + VPN/Tailscale 等で保護してください。詳細は [SECURITY.md](./SECURITY.md)。
+
 ## クイックスタート
 
 ```bash
@@ -143,6 +150,24 @@ SALESGATE_PASSWORD=your-strong-password
 - `.env.example` にも記載があります
 - なお、Webhook URL などの設定類は `SALESGATE_PASSWORD` とは別に、設定画面（`/settings`）で管理する項目になります
 
+### Deployment
+
+| 環境 | 推奨 | 備考 |
+|---|---|---|
+| **Local (Node)** | ✅ 公式サポート | `pnpm dev` + SQLite `prisma/dev.db` |
+| **Docker** | ✅ 公式サポート | `docker compose up --build` — SQLiteは `/data` volumeで永続化 |
+| **VPS / Home Server** | ✅ 公式サポート | Docker推奨 |
+| **Vercel** | ❌ v0.4非サポート | SQLiteが永続化しない。将来 `Turso/libSQL` 等で対応予定 |
+
+```bash
+# Docker (推奨 for production-like)
+SALESGATE_PASSWORD=your-long-random-password docker compose up --build
+# → http://localhost:3000
+# DBは salesgate-data volume に永続化。container recreateでも消えません。
+```
+
+SQLiteのバックアップは `prisma/dev.db` を停止中にコピーするか `VACUUM INTO` を使用してください。
+
 ### その他のコマンド
 
 | コマンド | 説明 |
@@ -150,7 +175,7 @@ SALESGATE_PASSWORD=your-strong-password
 | `pnpm scheduler` | フォローアップ生成を1回実行 |
 | `pnpm scheduler:watch` | フォローアップ生成を1時間ごとに実行（常駐） |
 | `pnpm prisma:generate` | Prisma Client を再生成 |
-| `pnpm test` | ユニットテスト（36件）を実行 |
+| `pnpm test` | ユニットテスト（60件）を実行 |
 | `pnpm test:watch` | テストをウォッチモードで実行 |
 
 #### スケジューラー
@@ -173,8 +198,8 @@ SALESGATE_PASSWORD=your-strong-password
 pnpm test
 ```
 
-- `node:test`（`--test-isolation=none` オプション付き）で36件のテストがパスします
-- 状態遷移・二重 claim・未承認送信の拒否・本文ハッシュ照合・プレイブック検証などをカバー
+- `node:test`（`--test-isolation=none` オプション付き）で**60件**のテストがパスします
+- 状態遷移・二重 claim・未承認送信の拒否・本文ハッシュ照合・プレイブック検証・**Safety invariants (SG-INV-001/002/003/005)** をカバー
 
 ### MCP E2E テスト
 
@@ -237,10 +262,20 @@ DSH で使うには、`skill-filesystem` の `customSkillDirs` に `skills/` デ
 
 各ハーネスの MCP クライアント設定に `http://localhost:3001/mcp`（streamable-http）を追加してください。**同じ MCP サーバーに複数ハーネスを同時接続可能**です（claim 制により二重送信は発生しません）。
 
+詳細はエージェント別ガイドを参照:
+
+- [DSH](./docs/setup-dsh.md)
+- [OpenClaw (example)](./docs/setup-openclaw.md)
+- [Claude Code (example)](./docs/setup-claude-code.md)
+- [MCP Compatibility](./docs/MCP_COMPATIBILITY.md)
+
 ## 設計ドキュメント
 
-- [DESIGN.md](./DESIGN.md) — UI / UX / Visual Design System（UI再現用Single Source of Truth）
-- [ARCHITECTURE.md](./ARCHITECTURE.md) — アーキテクチャ・データフロー・MCPツール一覧
+- [DESIGN.md](./DESIGN.md) — UI / UX / Visual Design System（UI再現用Single Source of Truth, v2 navy #0B1320 / sidebar 226px / lucide）
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — アーキテクチャ・データフロー・MCPツール一覧・状態遷移表
+- [SECURITY.md](./SECURITY.md) — 脆弱性報告・デプロイ警告・認証の位置づけ
+- [CONTRIBUTING.md](./CONTRIBUTING.md) — 開発手順・PRガイド
+- [MCP Compatibility](./docs/MCP_COMPATIBILITY.md) — SDK 1.30 / streamable-http の現状とupgrade path
 
 ## ロードマップ
 

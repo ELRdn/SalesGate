@@ -197,8 +197,8 @@ submit_draft(leadId) 実行時:
 |---|---|---|---|
 | `submit_draft` | 下書きを承認キューに提出 | subject, body, leadId?, agentName?, evidence?, riskFlags? | 二重タッチ防止・抑制リストチェック |
 | `list_pending_tasks` | エージェント宛タスク一覧 | assignee? | assignedToフィルタ対応 |
-| `get_approved_send_items` | 承認済み送信アイテムをクレーム | agentName? | 冪等（1エージェントのみ・二重送信防止） |
-| `report_send_result` | 送信結果を報告 | itemId, status, messageId?, sentBody? | ハッシュ照合（sentBody提供時） |
+| `get_approved_send_items` | 承認済み送信アイテムをクレーム | agentName? | 冪等（1エージェントのみ）+ **抑制再確認(SG-INV-004)** |
+| `report_send_result` | 送信結果を報告 | itemId, status, messageId?, sentBody?, sentSubject?, sentTo?, sentLeadId? | **Canonical payload ハッシュ照合(SG-INV-003)**。不一致は `hashMismatchAt` に監査記録 |
 | `search_leads` | リードを検索 | query?, status?, limit? | email一意制約 |
 | `update_lead_status` | リードステータスを更新 | leadId, status | SUPPRESSEDで抑制リスト化 |
 | `create_task` | タスクを作成 | type, title, description?, leadId?, assignedTo? | assignedTo対応 |
@@ -248,7 +248,41 @@ id, name, description, version, content(JSON), source, createdAt, updatedAt
 
 ---
 
-## 8. スキル（営業文作成）
+## 8. Safety Invariants (v0.4)
+
+| Invariant | 保証内容 | 実装 |
+|---|---|---|
+| SG-INV-001 | 未承認は claim/実行不可 | `approval-machine.isSendable` + `get_approved_send_items` where `APPROVED/EDITED` のみ |
+| SG-INV-002 | 承認は特定リビジョンをロック | `approve/editAndApprove` で `lockedHash` を生成、再編集は再承認が必要（状態遷移でガード） |
+| SG-INV-003 | Canonical payload整合性 | `hashPayload({leadId,email,subject,body})` でロック、`verifyPayload` で照合（宛先すり替え検知、旧hash後方互換） |
+| SG-INV-004 | Suppression always wins | `submit_draft`で提出時ブロック + `get_approved_send_items` claim直前に `lead.status===SUPPRESSED` を再確認 |
+| SG-INV-005 | Exactly one executor | `prisma.$transaction` + `updateMany where status IN [APPROVED,EDITED]` で冪等claim |
+| SG-INV-006 | Every execution is attributable | `ApprovalItem.claimedBy/claimedAt` + `MessageLog.sentBy/sentAt` + `lockedHash/hashMismatchAt` で監査 |
+
+**Permission Boundary**: AgentはMCPで `submit/claim/report` のみ。`approve/editAndApprove/reject` は Server Actions（人間UI、要 `SALESGATE_PASSWORD` セッション）。Agentが承認ゲートをバイパスする経路は存在しない。
+
+**Claim Crash Recovery**: 現行は `CLAIMED` のままロックされる（leaseなし）。`FAILED→CLAIMED/APPROVED` の手動リトライで復帰。自動lease/expiryは v0.5で検討（安全性問題ではなく可用性向上のためv0.4では見送り）。
+
+### State Machine
+
+```
+AWAITING_APPROVAL ─┬─→ APPROVED ─┬─→ CLAIMED ─┬─→ SENT (終端)
+                   ├─→ EDITED  ──┘            └─→ FAILED ─┬─→ CLAIMED (agent retry)
+                   ├─→ REJECTED (終端)                     ├─→ APPROVED (human retry)
+                   └─→ ARCHIVED (終端)                     └─→ ARCHIVED
+APPROVED/EDITED/FAILED ─→ ARCHIVED も可
+REJECTED/SENT/ARCHIVED は終端
+```
+
+| from | to | 許可 |
+|---|---|---|
+| AWAITING_APPROVAL | APPROVED, EDITED, REJECTED, ARCHIVED | ✅ |
+| APPROVED / EDITED | CLAIMED, ARCHIVED | ✅ |
+| CLAIMED | SENT, FAILED | ✅ |
+| FAILED | CLAIMED, APPROVED, ARCHIVED | ✅ |
+| REJECTED, SENT, ARCHIVED | — | 終端 |
+
+## 9. スキル（営業文作成）
 
 `skills/` ディレクトリに配置。DSHの `skill-filesystem` で発見。
 
@@ -261,7 +295,7 @@ v0.3 で作成。v1 改善版は `skills-v1/` に保存。詳細は `docs/skill-
 
 ---
 
-## 9. 将来計画（v0.4〜）
+## 10. 将来計画（v0.4〜）
 
 | バージョン | 内容 |
 |---|---|
@@ -271,7 +305,7 @@ v0.3 で作成。v1 改善版は `skills-v1/` に保存。詳細は `docs/skill-
 
 ---
 
-## 10. 開発コマンド
+## 11. 開発コマンド
 
 ```bash
 pnpm dev          # 開発サーバー起動（http://localhost:3000）

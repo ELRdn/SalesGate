@@ -8,9 +8,9 @@ import path from "node:path";
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
 function createClient(): PrismaClient {
-  const adapter = new PrismaBetterSQLite3({
-    url: `file:${path.join(process.cwd(), "prisma", "dev.db")}`,
-  });
+  // Docker等では DATABASE_URL=file:/data/salesgate.db を優先（永続ボリューム）
+  const dbUrl = process.env.DATABASE_URL ?? `file:${path.join(process.cwd(), "prisma", "dev.db")}`;
+  const adapter = new PrismaBetterSQLite3({ url: dbUrl });
   return new PrismaClient({ adapter });
 }
 

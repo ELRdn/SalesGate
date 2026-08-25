@@ -1,0 +1,17 @@
+services:
+  salesgate:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:/data/salesgate.db
+      # 本番では必ず変更すること（SECURITY.md参照）
+      - SALESGATE_PASSWORD=${SALESGATE_PASSWORD:-}
+    volumes:
+      - salesgate-data:/data
+    restart: unless-stopped
+
+volumes:
+  salesgate-data:
+    driver: local

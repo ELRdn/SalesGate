@@ -7,7 +7,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 make g+
 
 # 依存関係（cache効率のため先にコピー）
 COPY package.json pnpm-lock.yaml ./
-RUN corepack enable && pnpm install --frozen-lockfile
+# Node 26ではcorepackが標準同梱されないため pnpm を直接導入
+# pnpm 11では `package.json#pnpm` が非対応のため 10.30.1 にピン（lockfile生成バージョンに合わせる）
+RUN npm install --global pnpm@10.30.1 && pnpm install --frozen-lockfile
 
 # ソース
 COPY . .
@@ -22,4 +24,5 @@ EXPOSE 3000
 ENV NODE_ENV=production
 # SQLite を /data に永続化（composeでvolumeマウント）
 ENV DATABASE_URL="file:/data/salesgate.db"
-CMD ["pnpm", "start"]
+# 起動時にマイグレーションを適用してから起動（永続ボリュームの初期化）
+CMD ["sh", "-c", "pnpm exec prisma migrate deploy && pnpm start"]

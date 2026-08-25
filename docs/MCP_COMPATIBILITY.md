@@ -1,16 +1,16 @@
 # MCP Compatibility Report — SalesGate v0.4
 
-> **結論: 現行 SDK 1.30 + streamable-http は 2026年時点で推奨構成。v0.4では現行維持。**
+> **結論: SalesGate v0.4 intentionally remains on the @modelcontextprotocol/sdk v1 generation (1.30.x) + Streamable HTTP. The currently tested SalesGate MCP behavior uses the existing Streamable HTTP implementation.**
 
 ## Current Implementation
 
 | 項目 | 値 |
 |---|---|
-| SDK | `@modelcontextprotocol/sdk` **1.30.0** (`^1.30.0`) |
+| SDK | `@modelcontextprotocol/sdk` **1.30.0** (`^1.30.0`) — v1 generation |
 | Transport | `WebStandardStreamableHTTPServerTransport` (`/mcp`) |
 | Route | `src/app/mcp/route.ts` — `GET/POST/DELETE → handleMcpRequest` |
 | Server | `McpServer(name: "sales-gate", version: "0.1.0")` + 9 tools |
-| Protocol | `2025-06-18` (E2Eで検証) |
+| Tested protocol behavior | `2025-06-18` (E2Eで検証) |
 | Session | `mcp-session-id` ヘッダ + `Map<sessionId, Transport>` (シングルプロセス・インメモリ) |
 
 ## Supported Protocol Behavior
@@ -30,8 +30,10 @@
 
 ## Recommended Upgrade Path
 
-- **v0.4**: 現行 **1.30.0 + streamable-http を維持**。API変更小・テスト全パス・DSH接続維持・後方互換確保のため。
-- **v0.5以降**: SDKのメジャーバンプがあれば `pnpm up @modelcontextprotocol/sdk` で追従。`transport` は `WebStandardStreamableHTTPServerTransport` を継続（Next.js App Routerの推奨）。breaking change があれば `docs/MCP_COMPATIBILITY.md` を更新し E2E を再検証。
+- **v0.4**: 現行 **1.30.0 (v1 generation) + streamable-http を維持**。Release直前の安定性優先、既存34 E2E実績の維持、Safety-critical制御層のため。API変更小・テスト全パス・DSH接続維持・後方互換確保。
+- **v0.5 candidate**: **MCP SDK v2 / MCP 2026-07-28 compatibility migration** を別途計画。`pnpm up @modelcontextprotocol/sdk` で追従を検討。`transport` は `WebStandardStreamableHTTPServerTransport` を継続（Next.js App Routerの推奨）。breaking change があれば本ドキュメントを更新しE2Eを再検証。
+
+> Note: MCP SDK v2 / 2026-07-28 への移行は v0.4 release hardening中には導入せず、v0.5の互換性アップグレードとして計画する。
 
 ## Verification
 

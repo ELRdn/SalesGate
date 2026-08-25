@@ -133,10 +133,11 @@
 - [x] デプロイガイド（Local✅ / Docker✅ / Vercel❌を README と docs に明記、persistent /data volume）
 - [x] エージェント別セットアップガイド（docs/setup-dsh.md / setup-openclaw.md(example) / setup-claude-code.md(example)）
 - [ ] マルチテナント対応（v0.5へ送付 — 1インスタンス=1DB のInstance Isolationとして文書化済み）
+- [ ] v0.5 candidate: MCP SDK v2 / MCP 2026-07-28 compatibility migration（別途計画、v0.4ではv1 generationを維持）
 
 > **v2 UI 統合完了（2026-08-25）**: prototype（`salesgate-newui-v2/`）はarchived（gitignore）。DESIGN.md がSingle Source of Truth。v0.4 RCハードニング完了。
 
-> **v0.4 RC Hardening メモ（2026-08-25）**: SG-INV-003 canonical hash（leadId+email+subject+body）、SG-INV-004 claim時suppression再確認、SG-INV-005 atomic transaction、MCP現行維持、60 tests / tsc 0 errors、Docker永続化対応。残りはGitHub public化のみ。
+> **v0.4 RC Hardening メモ（2026-08-25）**: SG-INV-003 canonical hash（leadId+email+subject+body）、SG-INV-004 claim時suppression再確認、SG-INV-005 atomic transaction、MCPはv1 generation(1.30.x)を維持・tested protocol behavior 2025-06-18、60 tests / tsc 0 errors、Docker永続化対応。残りはGitHub public化のみ。
 
 ## 未検証リスク（実装前に確認が必要な事項）
 

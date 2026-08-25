@@ -6,7 +6,7 @@ import { z } from "zod";
 import { prisma } from "./prisma";
 import { assertTransition, type ApprovalStatus } from "./approval-machine";
 import { sendSlackNotification } from "./notify";
-import { hashEmailBody, verifyEmailBody } from "./hash";
+import { hashPayload, verifyPayload } from "./hash";
 
 /** ツール結果ヘルパー（JSONテキストを返す） */
 function textResult(obj: unknown) {
@@ -161,7 +161,9 @@ export function createSalesServer(): McpServer {
         });
         const result = [];
         for (const item of candidates) {
-          // updateMany の where で状態を再確認 → 二重claimの冪等ガード
+          // SG-INV-004: Suppression always wins — 承認後でもclaim直前に抑制を再確認
+          if (item.lead?.status === "SUPPRESSED") continue;
+          // updateMany の where で状態を再確認 → 二重claimの冪等ガード（SG-INV-005）
           const res = await tx.approvalItem.updateMany({
             where: { id: item.id, status: { in: ["APPROVED", "EDITED"] } },
             data: { status: "CLAIMED", claimedBy: agentName, claimedAt: new Date() },
@@ -202,23 +204,42 @@ export function createSalesServer(): McpServer {
           .string()
           .optional()
           .describe("実際に送信した本文（成功時。承認原文とのハッシュ照合に使われます）"),
+        sentSubject: z.string().optional().describe("実際に送信した件名（省略時はDBの件名で照合）"),
+        sentTo: z.string().optional().describe("実際に送信した宛先メールアドレス（SG-INV-003 宛先整合性検証用）"),
+        sentLeadId: z.string().optional().describe("実際に送信したリードID（省略時はDBのleadIdで照合）"),
       },
     },
-    async ({ approvalItemId, success, messageId, error, sentBody }) => {
-      const item = await prisma.approvalItem.findUnique({ where: { id: approvalItemId } });
+    async ({ approvalItemId, success, messageId, error, sentBody, sentSubject, sentTo, sentLeadId }) => {
+      const item = await prisma.approvalItem.findUnique({ where: { id: approvalItemId }, include: { lead: true } });
       if (!item) return fail(`アイテムが見つかりません: ${approvalItemId}`);
-      // 状態遷移の検証（CLAIMED からのみ SENT/FAILED へ）
+      // 状態遷移の検証（CLAIMED からのみ SENT/FAILED へ — SG-INV-001）
       try {
         assertTransition(item.status as ApprovalStatus, success ? "SENT" : "FAILED");
       } catch (e) {
         return fail(e instanceof Error ? e.message : "不正な状態遷移");
       }
       const now = new Date();
-      // 本文ハッシュ照合（v0.3-1）: 送信後検証。承認時にロックした原文と、実際に送信した本文を比較する
+      // SG-INV-003: Canonical Payload 整合性検証（承認時のロックと送信時の実体を比較）
       // 注意: 送信後の「検知」であり「防止」ではない。不一致は監査ログとして記録される
       let hashMatched: boolean | null = null;
-      if (success && sentBody !== undefined && sentBody.trim() !== "") {
-        hashMatched = verifyEmailBody(item.lockedHash, item.subject, sentBody);
+      if (success && (sentBody !== undefined || sentSubject !== undefined || sentTo !== undefined || sentLeadId !== undefined)) {
+        const approvedPayload = {
+          leadId: item.leadId,
+          email: item.lead?.email ?? null,
+          subject: item.subject,
+          body: item.editedBody ?? item.body,
+        };
+        const sentPayload = {
+          leadId: sentLeadId ?? item.leadId,
+          email: sentTo ?? item.lead?.email ?? null,
+          subject: sentSubject ?? item.subject,
+          body: sentBody ?? item.editedBody ?? item.body,
+        };
+        // sentBody等が提供された場合のみ厳密に検証。提供されなければ approved と同値で照合（後方互換）
+        const hasSentContent = sentBody !== undefined && sentBody.trim() !== "";
+        if (hasSentContent || sentSubject !== undefined || sentTo !== undefined || sentLeadId !== undefined) {
+          hashMatched = verifyPayload(item.lockedHash, approvedPayload, sentPayload);
+        }
       }
       const updated = await prisma.approvalItem.update({
         where: { id: approvalItemId },

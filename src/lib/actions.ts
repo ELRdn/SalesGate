@@ -7,7 +7,7 @@ import { prisma } from "./prisma";
 import { assertTransition, type ApprovalStatus } from "./approval-machine";
 import { parseCsvLeads } from "./csv";
 import { runFollowUpGeneration } from "./followup";
-import { hashEmailBody } from "./hash";
+import { hashPayload } from "./hash";
 import {
   KNOWN_SETTING_KEYS,
   NUMERIC_SETTING_KEYS,
@@ -22,9 +22,9 @@ import {
 // 承認キュー
 // ─────────────────────────────────────────────────────────────
 
-/** 承認（送信待ちへ）。承認時に本文のSHA-256をロック（ハッシュ照合の基準） */
+/** 承認（送信待ちへ）。承認時に実行ペイロードのSHA-256をロック（SG-INV-003: canonical payload） */
 export async function approveApprovalItem(id: string) {
-  const item = await prisma.approvalItem.findUnique({ where: { id } });
+  const item = await prisma.approvalItem.findUnique({ where: { id }, include: { lead: true } });
   if (!item) throw new Error("アイテムが見つかりません");
   assertTransition(item.status as ApprovalStatus, "APPROVED");
   await prisma.approvalItem.update({
@@ -32,7 +32,12 @@ export async function approveApprovalItem(id: string) {
     data: {
       status: "APPROVED",
       approvedAt: new Date(),
-      lockedHash: hashEmailBody(item.subject, item.body),
+      lockedHash: hashPayload({
+        leadId: item.leadId,
+        email: item.lead?.email ?? null,
+        subject: item.subject,
+        body: item.body,
+      }),
     },
   });
   revalidatePaths();
@@ -57,7 +62,7 @@ export async function editAndApproveApprovalItem(
   body: string,
   note?: string,
 ) {
-  const item = await prisma.approvalItem.findUnique({ where: { id } });
+  const item = await prisma.approvalItem.findUnique({ where: { id }, include: { lead: true } });
   if (!item) throw new Error("アイテムが見つかりません");
   if (!subject.trim() || !body.trim()) throw new Error("件名と本文は必須です");
   assertTransition(item.status as ApprovalStatus, "EDITED");
@@ -69,7 +74,12 @@ export async function editAndApproveApprovalItem(
       editedBody: body.trim(),
       approvedAt: new Date(),
       feedback: note?.trim() || null,
-      lockedHash: hashEmailBody(subject.trim(), body.trim()),
+      lockedHash: hashPayload({
+        leadId: item.leadId,
+        email: item.lead?.email ?? null,
+        subject: subject.trim(),
+        body: body.trim(),
+      }),
     },
   });
   revalidatePaths();

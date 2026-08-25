@@ -4,14 +4,21 @@ import { CheckCircle2, X } from "lucide-react";
 import { useState } from "react";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
-import type { PageKey } from "@/types";
 
-export function Shell({ children }: { children: React.ReactNode }) {
+export function Shell({
+  children,
+  pendingCount,
+  version,
+  agents,
+}: {
+  children: React.ReactNode;
+  pendingCount: number;
+  version: string;
+  agents: string[];
+}) {
   const [collapsed, setCollapsed] = useState(false);
-  const [page, setPage] = useState<PageKey>("ダッシュボード");
   const [toast, setToast] = useState<string | null>(null);
 
-  const pendingCount = 5; // TODO: 実際のDBから取得
   const notify = (text: string) => {
     setToast(text);
     window.setTimeout(() => setToast((current) => (current === text ? null : current)), 2600);
@@ -19,14 +26,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
-      <Sidebar active={page} setActive={setPage} pendingCount={pendingCount} collapsed={collapsed} />
-      <Topbar onToggleSidebar={() => setCollapsed((v) => !v)} setPage={setPage} notify={notify} />
+      <Sidebar pendingCount={pendingCount} collapsed={collapsed} version={version} agents={agents} />
+      <Topbar onToggleSidebar={() => setCollapsed((v) => !v)} notify={notify} pendingCount={pendingCount} />
       <main className="main-area">{children}</main>
       {toast ? (
         <div className="toast">
           <CheckCircle2 size={17} />
           <span>{toast}</span>
-          <button onClick={() => setToast(null)}><X size={15} /></button>
+          <button onClick={() => setToast(null)}>
+            <X size={15} />
+          </button>
         </div>
       ) : null}
     </div>

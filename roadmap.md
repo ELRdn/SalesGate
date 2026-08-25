@@ -124,14 +124,19 @@
 - [x] **v2 UI Phase 2: ダッシュボード再実装**（KPI 4カード、承認キュー dense rows、タスクサマリー、送信推移チャート、リスクアラート、アクティビティ）
 - [x] **v2 UI Phase 3: 承認キュー マスターディテール**（キューリスト + 詳細パネル、編集/却下モーダル、フィルタ/検索）
 - [x] **v2 UI Phase 4: 全ページ移行**（リード、タスク、設定、送信履歴、抑制リスト、プレイブック）
-- [ ] v2 UI Phase 5: テスト更新（E2E セレクタ修正）+ DESIGN.md と NEWDESIGN.md のマージ
-- [ ] ライセンス選定（MIT 想定）
-- [ ] GitHub 公開（README 最終化・リポジトリ構成整備）
-- [ ] デプロイガイド（Vercel / ローカル運用）
-- [ ] エージェント別セットアップガイド（DSH / OpenClaw / Claude Code の MCP 接続・Gmail MCP 設定）
-- [ ] マルチテナント対応（OSS 公開前に実装）
+- [x] v2 UI Phase 5: テスト更新（safety.test.ts 24件追加・全60件pass）+ DESIGN.md v2統合（neavy #0B1320 / sidebar 226px / lucide）
+- [x] Repository Hygiene（tsconfig exclude + .gitignore 隔離、tsc 0 errors）
+- [x] Execution Safety Hardening（SG-INV-003 canonical payload / SG-INV-004 suppression再確認 / SG-INV-005 atomic claim）
+- [x] MCP Compatibility Audit（SDK 1.30 / streamable-http 現行維持、docs/MCP_COMPATIBILITY.md）
+- [x] ライセンス選定（MIT — LICENSE追加、依存はMIT互換を確認）
+- [x] GitHub 公開準備（README 最終化・SECURITY.md・CONTRIBUTING.md・リポジトリ構成整備）
+- [x] デプロイガイド（Local✅ / Docker✅ / Vercel❌を README と docs に明記、persistent /data volume）
+- [x] エージェント別セットアップガイド（docs/setup-dsh.md / setup-openclaw.md(example) / setup-claude-code.md(example)）
+- [ ] マルチテナント対応（v0.5へ送付 — 1インスタンス=1DB のInstance Isolationとして文書化済み）
 
-> **v2 UI 統合メモ（2026-08-18）**: v2 prototype（`salesgate-newui-v2/`）から正規移植。色ベースが zinc 系 → neavy 系（#0B1320）に変更。ナビゲーションが水平トップバー → サイドバー（226px）に変更。アイコンが emoji → lucide-react に変更。NEWDESIGN.md は実験的設計書として維持。将来 DESIGN.md へマージ予定。
+> **v2 UI 統合完了（2026-08-25）**: prototype（`salesgate-newui-v2/`）はarchived（gitignore）。DESIGN.md がSingle Source of Truth。v0.4 RCハードニング完了。
+
+> **v0.4 RC Hardening メモ（2026-08-25）**: SG-INV-003 canonical hash（leadId+email+subject+body）、SG-INV-004 claim時suppression再確認、SG-INV-005 atomic transaction、MCP現行維持、60 tests / tsc 0 errors、Docker永続化対応。残りはGitHub public化のみ。
 
 ## 未検証リスク（実装前に確認が必要な事項）
 
